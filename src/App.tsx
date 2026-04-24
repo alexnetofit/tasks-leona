@@ -2,13 +2,14 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingOverlay } from '@mantine/core';
 import { useAuth } from '@/contexts/AuthContext';
 import LoginPage from '@/components/auth/LoginPage';
+import ResetPasswordPage from '@/components/auth/ResetPasswordPage';
 import AppLayout from '@/components/layout/AppLayout';
 import DashboardPage from '@/components/dashboard/DashboardPage';
 import KanbanBoard from '@/components/board/KanbanBoard';
 import MembersPage from '@/components/members/MembersPage';
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, isRecovery, clearRecovery } = useAuth();
 
   if (loading) {
     return (
@@ -16,6 +17,11 @@ export default function App() {
         <LoadingOverlay visible loaderProps={{ color: 'violet', type: 'dots' }} />
       </div>
     );
+  }
+
+  // Fluxo de recuperação de senha (via link do email)
+  if (user && isRecovery) {
+    return <ResetPasswordPage onComplete={clearRecovery} />;
   }
 
   if (!user) {

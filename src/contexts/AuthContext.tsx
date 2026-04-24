@@ -11,6 +11,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
+  isRecovery: boolean;
+  clearRecovery: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(false);
   const initialized = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
@@ -91,6 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
+        // Detectar fluxo de recuperação de senha
+        if (event === 'PASSWORD_RECOVERY') {
+          setIsRecovery(true);
+        }
+
         if (newSession?.user) {
           // Não bloquear — fetch em background
           fetchProfile(newSession.user.id).then((p) => setProfile(p));
@@ -127,8 +135,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = profile?.role === 'admin';
 
+  const clearRecovery = () => setIsRecovery(false);
+
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signIn, signOut, isAdmin }}>
+    <AuthContext.Provider value={{ user, session, profile, loading, signIn, signOut, isAdmin, isRecovery, clearRecovery }}>
       {children}
     </AuthContext.Provider>
   );

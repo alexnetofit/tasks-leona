@@ -98,3 +98,21 @@ export async function deactivateMember(id: string) {
 export async function reactivateMember(id: string) {
   return updateMember(id, { is_active: true });
 }
+
+/** Alterar senha do membro (Admin) — via service_role key */
+export async function updateMemberPassword(userId: string, newPassword: string) {
+  if (!supabaseAdmin) {
+    throw new Error('Service role key não configurada. Adicione VITE_SUPABASE_SERVICE_ROLE_KEY.');
+  }
+
+  if (newPassword.length < 6) {
+    throw new Error('A senha deve ter no mínimo 6 caracteres.');
+  }
+
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+
+  if (error) throw error;
+  return data.user;
+}

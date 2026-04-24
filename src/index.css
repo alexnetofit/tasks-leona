@@ -83,6 +83,43 @@ body {
 .login-title { font-size: 22px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.5px; }
 .login-subtitle { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 32px; }
 
+/* Forgot Password Link */
+.forgot-password-link {
+  display: block; text-align: right; font-size: 13px;
+  color: var(--accent-violet) !important; text-decoration: none;
+  transition: all var(--transition-fast); cursor: pointer;
+  background: none; border: none; padding: 0; margin-top: -4px;
+}
+.forgot-password-link:hover { color: var(--accent-violet-hover) !important; text-decoration: underline; }
+
+/* Forgot Success Box */
+.forgot-success-box {
+  text-align: center; padding: 32px 16px;
+  animation: slideUp var(--transition-smooth);
+}
+.forgot-success-icon {
+  font-size: 48px; margin-bottom: 12px;
+  animation: bounceIn 0.5s ease;
+}
+@keyframes bounceIn {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Reset Password Success */
+.reset-success {
+  text-align: center; padding: 32px 16px;
+  animation: slideUp var(--transition-smooth);
+}
+.reset-success-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto; color: white;
+  animation: bounceIn 0.5s ease;
+}
+
 /* ============================================ */
 /* App Shell — Header Layout                    */
 /* ============================================ */

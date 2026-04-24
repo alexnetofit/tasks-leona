@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button, TextInput, PasswordInput, Select, Modal, Badge, Text, Group, Stack, ActionIcon } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconPlus, IconPencil, IconUserOff, IconUserCheck, IconPhone, IconMail } from '@tabler/icons-react';
+import { IconPlus, IconPencil, IconUserOff, IconUserCheck, IconPhone, IconMail, IconKey } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import * as memberService from '@/services/memberService';
 import type { Profile } from '@/types';
@@ -13,6 +13,13 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpened, { open: openModal, close: closeModal }] = useDisclosure();
   const [editingMember, setEditingMember] = useState<Profile | null>(null);
+
+  // Password modal
+  const [passwordModalOpened, { open: openPasswordModal, close: closePasswordModal }] = useDisclosure();
+  const [passwordTarget, setPasswordTarget] = useState<Profile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   // Form
   const [fullName, setFullName] = useState('');
@@ -85,6 +92,46 @@ export default function MembersPage() {
     }
   };
 
+  const handleOpenPasswordModal = (member: Profile) => {
+    setPasswordTarget(member);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    openPasswordModal();
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordTarget) return;
+
+    if (!newPassword) {
+      notifications.show({ title: 'Erro', message: 'Informe a nova senha', color: 'red' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      notifications.show({ title: 'Erro', message: 'A senha deve ter no mínimo 6 caracteres', color: 'red' });
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      notifications.show({ title: 'Erro', message: 'As senhas não conferem', color: 'red' });
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await memberService.updateMemberPassword(passwordTarget.id, newPassword);
+      closePasswordModal();
+      setPasswordTarget(null);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      notifications.show({ title: 'Sucesso', message: `Senha de ${passwordTarget.full_name} alterada com sucesso`, color: 'green' });
+    } catch (err: any) {
+      notifications.show({ title: 'Erro', message: err.message || 'Erro ao alterar senha', color: 'red' });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
   return (
@@ -128,6 +175,7 @@ export default function MembersPage() {
               {isAdmin && (
                 <Group gap="xs">
                   <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => handleOpenEdit(member)} title="Editar"><IconPencil size={14} /></ActionIcon>
+                  <ActionIcon variant="subtle" color="yellow" size="sm" onClick={() => handleOpenPasswordModal(member)} title="Alterar Senha"><IconKey size={14} /></ActionIcon>
                   <ActionIcon variant="subtle" color={member.is_active ? 'red' : 'green'} size="sm" onClick={() => handleToggleActive(member)} title={member.is_active ? 'Desativar' : 'Reativar'}>
                     {member.is_active ? <IconUserOff size={14} /> : <IconUserCheck size={14} />}
                   </ActionIcon>
@@ -155,6 +203,53 @@ export default function MembersPage() {
           <TextInput label="Cargo" placeholder="Desenvolvedor, Designer..." value={cargo} onChange={(e) => setCargo(e.currentTarget.value)} />
           <Select label="Nível" data={[{ value: 'admin', label: 'Administrador' }, { value: 'operacao', label: 'Operação' }]} value={role} onChange={(val) => setRole(val || 'operacao')} />
           <Button fullWidth onClick={handleSave} loading={saving} color="violet">{editingMember ? 'Salvar Alterações' : 'Criar Membro'}</Button>
+        </Stack>
+      </Modal>
+
+      {/* Modal Alterar Senha */}
+      <Modal
+        opened={passwordModalOpened}
+        onClose={closePasswordModal}
+        title={
+          <Group gap="xs">
+            <IconKey size={18} color="var(--accent-violet)" />
+            <span>Alterar Senha</span>
+          </Group>
+        }
+        size="sm"
+      >
+        <Stack gap="md">
+          {passwordTarget && (
+            <Text size="sm" c="dimmed">
+              Definir nova senha para <Text span fw={600} c="var(--text-primary)">{passwordTarget.full_name}</Text>
+            </Text>
+          )}
+
+          <PasswordInput
+            label="Nova Senha"
+            placeholder="Mínimo 6 caracteres"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.currentTarget.value)}
+            required
+          />
+
+          <PasswordInput
+            label="Confirmar Nova Senha"
+            placeholder="Repita a senha"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.currentTarget.value)}
+            required
+          />
+
+          <Button
+            fullWidth
+            onClick={handleChangePassword}
+            loading={savingPassword}
+            color="violet"
+            leftSection={<IconKey size={16} />}
+          >
+            Alterar Senha
+          </Button>
         </Stack>
       </Modal>
     </div>
