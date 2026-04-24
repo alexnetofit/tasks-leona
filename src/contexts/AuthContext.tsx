@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { supabase } from '@/config/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 import type { Profile } from '@/types';
@@ -15,32 +15,56 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const MAX_PROFILE_RETRIES = 3;
+const PROFILE_RETRY_DELAY = 800;
+const AUTH_TIMEOUT = 8000; // 8s max para loading
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const initialized = useRef(false);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+  const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
+    for (let attempt = 1; attempt <= MAX_PROFILE_RETRIES; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (error) {
-        console.error('[AuthContext] Erro ao buscar profile:', error);
-        return;
+        if (error) {
+          console.warn(`[Auth] Profile fetch attempt ${attempt} failed:`, error.message);
+          if (attempt < MAX_PROFILE_RETRIES) {
+            await new Promise((r) => setTimeout(r, PROFILE_RETRY_DELAY));
+            continue;
+          }
+          return null;
+        }
+
+        return data as Profile | null;
+      } catch (err) {
+        console.warn(`[Auth] Profile fetch attempt ${attempt} error:`, err);
+        if (attempt < MAX_PROFILE_RETRIES) {
+          await new Promise((r) => setTimeout(r, PROFILE_RETRY_DELAY));
+        }
       }
-      setProfile(data as Profile | null);
-    } catch (err) {
-      console.error('[AuthContext] Erro inesperado:', err);
     }
+    return null;
   }, []);
 
   useEffect(() => {
-    // Buscar sessão existente
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // Safety timeout — nunca ficar em loading infinito
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      console.warn('[Auth] Safety timeout — forçando fim do loading');
+    }, AUTH_TIMEOUT);
+
     const initAuth = async () => {
       try {
         const { data: { session: existingSession } } = await supabase.auth.getSession();
@@ -48,11 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(existingSession?.user ?? null);
 
         if (existingSession?.user) {
-          await fetchProfile(existingSession.user.id);
+          const p = await fetchProfile(existingSession.user.id);
+          setProfile(p);
         }
       } catch (err) {
-        console.error('[AuthContext] Erro na inicialização:', err);
+        console.error('[Auth] Init error:', err);
       } finally {
+        clearTimeout(safetyTimer);
         setLoading(false);
       }
     };
@@ -61,20 +87,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listener para mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
         if (newSession?.user) {
-          await fetchProfile(newSession.user.id);
+          // Não bloquear — fetch em background
+          fetchProfile(newSession.user.id).then((p) => setProfile(p));
         } else {
           setProfile(null);
         }
+
+        // Sempre liberar o loading
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
   const signIn = async (email: string, password: string) => {

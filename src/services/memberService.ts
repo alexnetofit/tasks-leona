@@ -1,7 +1,7 @@
-import { supabase } from '@/config/supabase';
+import { supabase, supabaseAdmin } from '@/config/supabase';
 import type { Profile } from '@/types';
 
-/** Buscar todos os membros ativos */
+/** Buscar todos os membros */
 export async function getMembers() {
   const { data, error } = await supabase
     .from('profiles')
@@ -24,7 +24,7 @@ export async function getActiveMembers() {
   return (data || []) as Profile[];
 }
 
-/** Criar novo membro (cria user no Auth + profile) */
+/** Criar novo membro — usa Admin API para skip de email confirmation */
 export async function createMember(member: {
   email: string;
   password: string;
@@ -33,26 +33,31 @@ export async function createMember(member: {
   cargo?: string;
   role: 'admin' | 'operacao';
 }) {
-  // Criar user via service role não disponível no client
-  // Usamos signUp normal e depois atualizamos o profile
-  const { data: authData, error: authError } = await supabase.auth.signUp({
+  // Usar supabaseAdmin para criar o user já confirmado (sem email)
+  if (!supabaseAdmin) {
+    throw new Error('Service role key não configurada. Adicione VITE_SUPABASE_SERVICE_ROLE_KEY.');
+  }
+
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: member.email,
     password: member.password,
-    options: {
-      data: {
-        full_name: member.full_name,
-      },
+    email_confirm: true, // Já confirmado, sem enviar email
+    user_metadata: {
+      full_name: member.full_name,
     },
   });
 
   if (authError) throw authError;
   if (!authData.user) throw new Error('Erro ao criar usuário');
 
-  // O trigger handle_new_user criará o profile automaticamente
-  // Mas precisamos atualizar os campos extras
+  // Aguardar o trigger handle_new_user criar o profile
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Atualizar campos extras no profile
   const { error: profileError } = await supabase
     .from('profiles')
     .update({
+      full_name: member.full_name,
       whatsapp: member.whatsapp || null,
       cargo: member.cargo || null,
       role: member.role,
