@@ -7,18 +7,13 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Build args para variáveis Vite (injetadas no build)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_APP_NAME="Leona Projetos"
-
 # Copiar package files
 COPY package.json package-lock.json ./
 
 # Install deps
 RUN npm ci --legacy-peer-deps
 
-# Copiar código fonte
+# Copiar código fonte (inclui .env com variáveis VITE_*)
 COPY . .
 
 # Build
@@ -39,8 +34,8 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Expor porta
 EXPOSE 80
 
-# Healthcheck
+# Healthcheck usando curl (disponível no nginx:alpine)
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost/ || exit 1
+  CMD curl -f http://localhost/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
