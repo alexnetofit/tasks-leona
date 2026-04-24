@@ -142,11 +142,14 @@ export default function MembersPage() {
       <Modal opened={modalOpened} onClose={closeModal} title={editingMember ? 'Editar Membro' : 'Novo Membro'} size="md">
         <Stack gap="md">
           <TextInput label="Nome completo" placeholder="João Silva" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} required />
+          <TextInput label="Email" placeholder="joao@email.com" value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+            required={!editingMember}
+            disabled={!!editingMember}
+            description={editingMember ? 'O email não pode ser alterado' : undefined}
+          />
           {!editingMember && (
-            <>
-              <TextInput label="Email" placeholder="joao@email.com" value={email} onChange={(e) => setEmail(e.currentTarget.value)} required />
-              <PasswordInput label="Senha" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.currentTarget.value)} required />
-            </>
+            <PasswordInput label="Senha" placeholder="Mínimo 6 caracteres" value={password} onChange={(e) => setPassword(e.currentTarget.value)} required />
           )}
           <TextInput label="WhatsApp" placeholder="5511999999999" value={whatsapp} onChange={(e) => setWhatsapp(e.currentTarget.value)} />
           <TextInput label="Cargo" placeholder="Desenvolvedor, Designer..." value={cargo} onChange={(e) => setCargo(e.currentTarget.value)} />
