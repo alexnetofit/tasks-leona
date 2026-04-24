@@ -1,0 +1,33 @@
+# dependencies
+node_modules
+npm-debug.log*
+
+# build output (will be created in Docker)
+dist
+
+# environment files
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase local
+supabase/.temp
+
+# Scripts internos
+scripts/
+
+# Docs internos
+docs/
+
+# Git
+.git
+.gitignore
