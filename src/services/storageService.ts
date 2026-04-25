@@ -1,8 +1,8 @@
 import { supabase } from '@/config/supabase';
 
-const BUNNY_STORAGE_URL = import.meta.env.VITE_BUNNY_STORAGE_URL || 'https://br.storage.bunnycdn.com/leona-storage';
+const BUNNY_STORAGE_URL = import.meta.env.VITE_BUNNY_STORAGE_URL || 'https://ny.storage.bunnycdn.com/leonastorage';
 const BUNNY_ACCESS_KEY = import.meta.env.VITE_BUNNY_ACCESS_KEY || '';
-const BUNNY_CDN_URL = import.meta.env.VITE_BUNNY_CDN_URL || 'https://leona-storage.b-cdn.net';
+const BUNNY_CDN_URL = import.meta.env.VITE_BUNNY_CDN_URL || 'https://leona-flow.b-cdn.net';
 
 /**
  * Upload de arquivo para o Bunny CDN Storage
