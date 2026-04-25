@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Drawer, Select, ActionIcon, Text, Group, Stack, Badge, Textarea, Combobox, useCombobox, TextInput, InputBase, Menu, FileButton, Loader } from '@mantine/core';
+import { Drawer, Select, ActionIcon, Text, Group, Stack, Badge, Textarea, Combobox, useCombobox, TextInput, InputBase, Menu, ColorInput, Loader } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import {
   IconUser, IconTag, IconCalendar, IconFlame, IconTrash, IconColumns3,
-  IconDots, IconLink, IconArrowsMaximize, IconArrowsMinimize,
-  IconPaperclip, IconUpload, IconFile, IconPhoto, IconX, IconDownload,
+  IconDots, IconLink, IconMaximize, IconMinimize, IconPalette,
+  IconPaperclip, IconUpload, IconFile, IconX, IconDownload,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import * as taskService from '@/services/taskService';
@@ -15,6 +15,7 @@ import type { Task, BoardColumn, Profile, TaskComment, TaskType, TaskAttachment 
 import { PRIORITY_CONFIG } from '@/types';
 import RichEditor from '../shared/RichEditor';
 import ImageLightbox from '../shared/ImageLightbox';
+import dayjs from 'dayjs';
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -35,6 +36,7 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
   const [taskType, setTaskType] = useState<string | null>(null);
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [columnId, setColumnId] = useState<string | null>(null);
+  const [cardColor, setCardColor] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -64,6 +66,7 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
       setTypeSearch(task.task_type || '');
       setAssignedTo(task.assigned_to || null);
       setColumnId(task.column_id || null);
+      setCardColor(task.color || null);
       setDueDate(task.due_date ? new Date(task.due_date) : null);
       taskService.getTaskComments(task.id).then(setComments).catch(console.error);
     }
@@ -117,27 +120,14 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     try {
       for (const file of files) {
         const url = await uploadTaskImage(boardId, task.id, file);
-        await registerAttachment({
-          task_id: task.id,
-          file_url: url,
-          file_name: file.name,
-          file_type: file.type,
-          file_size: file.size,
-          uploaded_by: user?.id,
-        });
+        await registerAttachment({ task_id: task.id, file_url: url, file_name: file.name, file_type: file.type, file_size: file.size, uploaded_by: user?.id });
       }
       onUpdate();
-      notifications.show({
-        title: 'Arquivo(s) anexado(s)',
-        message: `${files.length} arquivo(s) enviado(s) com sucesso`,
-        color: 'green',
-      });
+      notifications.show({ title: 'Arquivo(s) anexado(s)', message: `${files.length} arquivo(s) enviado(s)`, color: 'green' });
     } catch (err) {
       console.error('[TaskDrawer] Upload error:', err);
       notifications.show({ title: 'Erro', message: 'Falha ao enviar arquivo(s)', color: 'red' });
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   /** Deletar um anexo */
@@ -187,9 +177,8 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     if (!task) return;
     const url = `${window.location.origin}/board?task=${task.id}`;
     navigator.clipboard.writeText(url).then(() => {
-      notifications.show({ title: 'Link copiado', message: 'O link da tarefa foi copiado para a área de transferência', color: 'violet' });
+      notifications.show({ title: 'Link copiado', message: 'O link da tarefa foi copiado', color: 'violet' });
     }).catch(() => {
-      // Fallback
       const input = document.createElement('input');
       input.value = url;
       document.body.appendChild(input);
@@ -230,6 +219,8 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
   const imageAttachments = attachments.filter(isImageFile);
   const fileAttachments = attachments.filter((a) => !isImageFile(a));
 
+  const isOverdue = dueDate && !task.completed_at && dayjs(dueDate).isBefore(dayjs(), 'day');
+
   return (
     <>
       <Drawer
@@ -248,23 +239,23 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
           <Group gap="xs" justify="space-between" w="100%">
             <Badge size="sm" variant="light" color="violet">Tarefa</Badge>
 
-            <Group gap={4}>
-              {/* Expand / Minimize */}
+            <Group gap={4} ml="auto">
+              {/* Expand / Minimize — ícones bem distintos */}
               <ActionIcon
                 variant="subtle"
                 color="gray"
                 size="sm"
                 onClick={() => setIsExpanded((prev) => !prev)}
-                title={isExpanded ? 'Minimizar' : 'Expandir'}
+                title={isExpanded ? 'Reduzir' : 'Expandir'}
               >
-                {isExpanded ? <IconArrowsMinimize size={15} /> : <IconArrowsMaximize size={15} />}
+                {isExpanded ? <IconMinimize size={16} /> : <IconMaximize size={16} />}
               </ActionIcon>
 
               {/* Actions dropdown */}
               <Menu shadow="md" width={180} position="bottom-end">
                 <Menu.Target>
                   <ActionIcon variant="subtle" color="gray" size="sm" title="Ações">
-                    <IconDots size={15} />
+                    <IconDots size={16} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
@@ -281,98 +272,117 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
           </Group>
         }
       >
-        {/* Title */}
+        {/* Title + Overdue Badge */}
         <div className="task-drawer-header">
           <input className="task-drawer-title-input" value={title} onChange={(e) => setTitle(e.target.value)}
             onBlur={handleTitleBlur} placeholder="Nome da tarefa..." />
+          {isOverdue && (
+            <Badge size="sm" variant="filled" color="red" mt={4}>🔥 Em Atraso</Badge>
+          )}
         </div>
 
-        {/* Properties */}
+        {/* Properties — Grid 2 colunas */}
         <div className="task-drawer-properties">
-          <div className="task-drawer-property">
-            <div className="task-drawer-property-label"><IconColumns3 size={14} /> Status</div>
-            <div className="task-drawer-property-value">
-              <Select data={columns.map((c) => ({ value: c.id, label: c.title }))} value={columnId}
-                onChange={(val) => { setColumnId(val); if (val) saveField('column_id', val); }}
-                variant="unstyled" size="xs" styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+          <div className="task-drawer-properties-grid">
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconColumns3 size={14} /> Status</div>
+              <div className="task-drawer-property-value">
+                <Select data={columns.map((c) => ({ value: c.id, label: c.title }))} value={columnId}
+                  onChange={(val) => { setColumnId(val); if (val) saveField('column_id', val); }}
+                  variant="unstyled" size="xs" styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+              </div>
             </div>
-          </div>
 
-          <div className="task-drawer-property">
-            <div className="task-drawer-property-label"><IconUser size={14} /> Responsável</div>
-            <div className="task-drawer-property-value">
-              <Select data={members.map((m) => ({ value: m.id, label: m.full_name }))} value={assignedTo}
-                onChange={(val) => { setAssignedTo(val); saveField('assigned_to', val || null); }}
-                variant="unstyled" size="xs" placeholder="Selecionar..." clearable
-                styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconUser size={14} /> Responsável</div>
+              <div className="task-drawer-property-value">
+                <Select data={members.map((m) => ({ value: m.id, label: m.full_name }))} value={assignedTo}
+                  onChange={(val) => { setAssignedTo(val); saveField('assigned_to', val || null); }}
+                  variant="unstyled" size="xs" placeholder="Selecionar..." clearable
+                  styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+              </div>
             </div>
-          </div>
 
-          <div className="task-drawer-property">
-            <div className="task-drawer-property-label"><IconFlame size={14} /> Prioridade</div>
-            <div className="task-drawer-property-value">
-              <Select
-                data={Object.entries(PRIORITY_CONFIG).map(([key, val]) => ({ value: key, label: `${val.emoji} ${val.label}` }))}
-                value={priority} onChange={(val) => { setPriority(val); saveField('priority', val || null); }}
-                variant="unstyled" size="xs" placeholder="Selecionar..." clearable
-                styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconFlame size={14} /> Prioridade</div>
+              <div className="task-drawer-property-value">
+                <Select
+                  data={Object.entries(PRIORITY_CONFIG).map(([key, val]) => ({ value: key, label: `${val.emoji} ${val.label}` }))}
+                  value={priority} onChange={(val) => { setPriority(val); saveField('priority', val || null); }}
+                  variant="unstyled" size="xs" placeholder="Selecionar..." clearable
+                  styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+              </div>
             </div>
-          </div>
 
-          {/* Tipo — Autocomplete Creatable */}
-          <div className="task-drawer-property">
-            <div className="task-drawer-property-label"><IconTag size={14} /> Tipo</div>
-            <div className="task-drawer-property-value">
-              <Combobox store={combobox} onOptionSubmit={handleTaskTypeSelect}>
-                <Combobox.Target>
-                  <InputBase
-                    rightSection={<Combobox.Chevron />}
-                    rightSectionPointerEvents="none"
-                    value={typeSearch}
-                    onChange={(e) => { setTypeSearch(e.currentTarget.value); combobox.openDropdown(); combobox.updateSelectedOptionIndex(); }}
-                    onClick={() => combobox.openDropdown()}
-                    onFocus={() => combobox.openDropdown()}
-                    onBlur={() => combobox.closeDropdown()}
-                    placeholder="Selecionar ou criar..."
-                    variant="unstyled"
-                    size="xs"
-                    styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }}
-                  />
-                </Combobox.Target>
-                <Combobox.Dropdown>
-                  <Combobox.Options>
-                    {filteredTypes.map((t) => (
-                      <Combobox.Option key={t.id} value={t.name}>
-                        <Group gap="xs">
-                          <span style={{ fontSize: 14 }}>{t.icon}</span>
-                          <span>{t.name}</span>
-                        </Group>
-                      </Combobox.Option>
-                    ))}
-                    {showCreateOption && (
-                      <Combobox.Option value={typeSearch.trim()}>
-                        <Group gap="xs">
-                          <span style={{ color: 'var(--accent-violet)' }}>+ Criar</span>
-                          <span style={{ fontWeight: 600 }}>"{typeSearch.trim()}"</span>
-                        </Group>
-                      </Combobox.Option>
-                    )}
-                    {filteredTypes.length === 0 && !showCreateOption && (
-                      <Combobox.Empty>Nenhum tipo encontrado</Combobox.Empty>
-                    )}
-                  </Combobox.Options>
-                </Combobox.Dropdown>
-              </Combobox>
+            {/* Tipo — Autocomplete Creatable */}
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconTag size={14} /> Tipo</div>
+              <div className="task-drawer-property-value">
+                <Combobox store={combobox} onOptionSubmit={handleTaskTypeSelect}>
+                  <Combobox.Target>
+                    <InputBase
+                      rightSection={<Combobox.Chevron />}
+                      rightSectionPointerEvents="none"
+                      value={typeSearch}
+                      onChange={(e) => { setTypeSearch(e.currentTarget.value); combobox.openDropdown(); combobox.updateSelectedOptionIndex(); }}
+                      onClick={() => combobox.openDropdown()}
+                      onFocus={() => combobox.openDropdown()}
+                      onBlur={() => combobox.closeDropdown()}
+                      placeholder="Selecionar ou criar..."
+                      variant="unstyled"
+                      size="xs"
+                      styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }}
+                    />
+                  </Combobox.Target>
+                  <Combobox.Dropdown>
+                    <Combobox.Options>
+                      {filteredTypes.map((t) => (
+                        <Combobox.Option key={t.id} value={t.name}>
+                          <Group gap="xs">
+                            <span style={{ fontSize: 14 }}>{t.icon}</span>
+                            <span>{t.name}</span>
+                          </Group>
+                        </Combobox.Option>
+                      ))}
+                      {showCreateOption && (
+                        <Combobox.Option value={typeSearch.trim()}>
+                          <Group gap="xs">
+                            <span style={{ color: 'var(--accent-violet)' }}>+ Criar</span>
+                            <span style={{ fontWeight: 600 }}>"{typeSearch.trim()}"</span>
+                          </Group>
+                        </Combobox.Option>
+                      )}
+                      {filteredTypes.length === 0 && !showCreateOption && (
+                        <Combobox.Empty>Nenhum tipo encontrado</Combobox.Empty>
+                      )}
+                    </Combobox.Options>
+                  </Combobox.Dropdown>
+                </Combobox>
+              </div>
             </div>
-          </div>
 
-          <div className="task-drawer-property">
-            <div className="task-drawer-property-label"><IconCalendar size={14} /> Prazo</div>
-            <div className="task-drawer-property-value">
-              <DatePickerInput value={dueDate}
-                onChange={(val: any) => { const d = val ? new Date(val) : null; setDueDate(d); saveField('due_date', d ? d.toISOString() : null); }}
-                variant="unstyled" size="xs" placeholder="Selecionar..." clearable valueFormat="DD/MM/YYYY"
-                styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconCalendar size={14} /> Prazo</div>
+              <div className="task-drawer-property-value">
+                <DatePickerInput value={dueDate}
+                  onChange={(val: any) => { const d = val ? new Date(val) : null; setDueDate(d); saveField('due_date', d ? d.toISOString() : null); }}
+                  variant="unstyled" size="xs" placeholder="Selecionar..." clearable valueFormat="DD/MM/YYYY"
+                  styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }} />
+              </div>
+            </div>
+
+            <div className="task-drawer-property">
+              <div className="task-drawer-property-label"><IconPalette size={14} /> Cor</div>
+              <div className="task-drawer-property-value">
+                <ColorInput
+                  value={cardColor || ''}
+                  onChange={(val) => { setCardColor(val || null); saveField('color', val || null); }}
+                  variant="unstyled" size="xs" placeholder="Sem cor"
+                  format="hex"
+                  swatches={['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899']}
+                  styles={{ input: { color: 'var(--text-primary)', fontSize: '13px' } }}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -485,24 +495,10 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
                     </div>
                   </Group>
                   <Group gap={4}>
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      size="xs"
-                      component="a"
-                      href={att.file_url}
-                      target="_blank"
-                      title="Baixar"
-                    >
+                    <ActionIcon variant="subtle" color="gray" size="xs" component="a" href={att.file_url} target="_blank" title="Baixar">
                       <IconDownload size={12} />
                     </ActionIcon>
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      size="xs"
-                      onClick={() => handleDeleteAttachment(att)}
-                      title="Remover"
-                    >
+                    <ActionIcon variant="subtle" color="red" size="xs" onClick={() => handleDeleteAttachment(att)} title="Remover">
                       <IconX size={12} />
                     </ActionIcon>
                   </Group>

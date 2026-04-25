@@ -1,5 +1,5 @@
-import { Badge } from '@mantine/core';
-import { IconCalendar } from '@tabler/icons-react';
+import { Badge, Group } from '@mantine/core';
+import { IconCalendar, IconPaperclip } from '@tabler/icons-react';
 import type { Task, TaskPriority } from '@/types';
 import { PRIORITY_CONFIG } from '@/types';
 import dayjs from 'dayjs';
@@ -17,22 +17,27 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
   const getInitials = (name: string) =>
     name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 
-  const isOverdue = task.due_date && dayjs(task.due_date).isBefore(dayjs(), 'day');
-  const isDueSoon = task.due_date &&
+  const isOverdue = task.due_date && !task.completed_at && dayjs(task.due_date).isBefore(dayjs(), 'day');
+  const isDueSoon = task.due_date && !task.completed_at &&
     dayjs(task.due_date).diff(dayjs(), 'day') <= 2 &&
     dayjs(task.due_date).isAfter(dayjs());
 
+  const attachmentCount = task.attachments?.length || 0;
+
   return (
-    <div className="task-card" onClick={onClick}>
+    <div
+      className="task-card"
+      onClick={onClick}
+      style={{
+        borderLeftColor: task.color || undefined,
+        borderLeftWidth: task.color ? 3 : undefined,
+      }}
+    >
       <div className="task-card-title">{task.title}</div>
 
       <div className="task-card-meta">
         {priorityConf && (
-          <Badge
-            size="xs"
-            variant="light"
-            color={priorityConf.color}
-          >
+          <Badge size="xs" variant="light" color={priorityConf.color}>
             {priorityConf.emoji} {priorityConf.label}
           </Badge>
         )}
@@ -41,42 +46,36 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
             {task.task_type}
           </Badge>
         )}
+        {isOverdue && (
+          <Badge size="xs" variant="filled" color="red">
+            Em Atraso
+          </Badge>
+        )}
       </div>
 
-      {/* Images preview */}
-      {task.attachments && task.attachments.length > 0 && (
-        <div className="task-card-images">
-          {task.attachments.slice(0, 3).map((att) => (
-            <img
-              key={att.id}
-              src={att.file_url}
-              alt={att.file_name || 'Imagem'}
-              className="task-card-image-thumb"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ))}
-          {task.attachments.length > 3 && (
-            <Badge size="xs" variant="filled" color="dark">
-              +{task.attachments.length - 3}
-            </Badge>
-          )}
-        </div>
-      )}
-
       <div className="task-card-footer">
-        {task.due_date ? (
-          <span
-            className="task-card-date"
-            style={{
-              color: isOverdue ? '#ef4444' : isDueSoon ? '#f59e0b' : 'var(--text-muted)',
-            }}
-          >
-            <IconCalendar size={12} />
-            {dayjs(task.due_date).format('DD MMM')}
-          </span>
-        ) : (
-          <span />
-        )}
+        <Group gap={8}>
+          {task.due_date ? (
+            <span
+              className="task-card-date"
+              style={{
+                color: isOverdue ? '#ef4444' : isDueSoon ? '#f59e0b' : 'var(--text-muted)',
+              }}
+            >
+              <IconCalendar size={12} />
+              {dayjs(task.due_date).format('DD MMM')}
+            </span>
+          ) : (
+            <span />
+          )}
+
+          {attachmentCount > 0 && (
+            <span className="task-card-attachment-count">
+              <IconPaperclip size={12} />
+              {attachmentCount}
+            </span>
+          )}
+        </Group>
 
         {task.assignee && (
           <div

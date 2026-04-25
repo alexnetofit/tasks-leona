@@ -53,6 +53,7 @@ export interface Task {
   assigned_to: string | null;
   created_by: string | null;
   position: number;
+  color: string | null;
   due_date: string | null;
   completed_at: string | null;
   created_at: string;

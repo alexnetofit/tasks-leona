@@ -297,6 +297,7 @@ body {
   background: var(--bg-elevated); border: 1px solid var(--border-subtle);
   border-radius: 8px; padding: 10px 12px; cursor: pointer;
   transition: all var(--transition-fast); user-select: none;
+  border-left: 3px solid transparent;
 }
 .task-card:hover { border-color: var(--border-light); box-shadow: 0 2px 8px rgba(0,0,0,0.2); transform: translateY(-1px); }
 .task-card.dragging { opacity: 0.5; box-shadow: 0 8px 24px rgba(124,58,237,0.2); border-color: var(--accent-violet); }
@@ -310,12 +311,9 @@ body {
   display: flex; align-items: center; justify-content: center;
   color: white; font-size: 10px; font-weight: 600;
 }
-.task-card-images { display: flex; gap: 4px; margin-top: 8px; }
-.task-card-image-thumb {
-  width: 48px; height: 36px; border-radius: 4px; object-fit: cover;
-  cursor: pointer; border: 1px solid var(--border-subtle); transition: border-color var(--transition-fast);
+.task-card-attachment-count {
+  font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 3px;
 }
-.task-card-image-thumb:hover { border-color: var(--accent-violet); }
 
 /* ============================================ */
 /* Task Drawer                                  */
@@ -328,12 +326,18 @@ body {
 }
 .task-drawer-title-input::placeholder { color: var(--text-muted); }
 .task-drawer-properties { padding: 0 24px 16px; border-bottom: 1px solid var(--border-subtle); }
-.task-drawer-property { display: flex; align-items: center; gap: 12px; padding: 5px 0; min-height: 32px; }
-.task-drawer-property-label {
-  display: flex; align-items: center; gap: 8px;
-  width: 120px; min-width: 120px; font-size: 13px; color: var(--text-secondary);
+.task-drawer-properties-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px;
 }
-.task-drawer-property-value { flex: 1; }
+@media (max-width: 600px) {
+  .task-drawer-properties-grid { grid-template-columns: 1fr; }
+}
+.task-drawer-property { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: 30px; }
+.task-drawer-property-label {
+  display: flex; align-items: center; gap: 6px;
+  width: 100px; min-width: 100px; font-size: 12px; color: var(--text-secondary);
+}
+.task-drawer-property-value { flex: 1; min-width: 0; }
 .task-drawer-editor { padding: 16px 24px; }
 .task-drawer-editor-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; }
 
