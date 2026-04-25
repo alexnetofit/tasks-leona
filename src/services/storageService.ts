@@ -1,30 +1,93 @@
 import { supabase } from '@/config/supabase';
 
-/** Upload de imagem para o Supabase Storage */
+const BUNNY_STORAGE_URL = import.meta.env.VITE_BUNNY_STORAGE_URL || 'https://br.storage.bunnycdn.com/leona-storage';
+const BUNNY_ACCESS_KEY = import.meta.env.VITE_BUNNY_ACCESS_KEY || '';
+const BUNNY_CDN_URL = import.meta.env.VITE_BUNNY_CDN_URL || 'https://leona-storage.b-cdn.net';
+
+/**
+ * Upload de arquivo para o Bunny CDN Storage
+ * PUT https://{region}.storage.bunnycdn.com/{storageZoneName}/{path}/{fileName}
+ *
+ * NOTA: Bunny Storage aceita CORS para PUT de qualquer origem.
+ * A Pull Zone deve estar configurada no painel Bunny para servir os arquivos publicamente.
+ */
+async function uploadToBunny(filePath: string, file: File | Blob): Promise<string> {
+  const url = `${BUNNY_STORAGE_URL}/${filePath}`;
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'AccessKey': BUNNY_ACCESS_KEY,
+      'Content-Type': file.type || 'application/octet-stream',
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error');
+    console.error(`[Bunny] Upload failed: ${response.status} - ${errorText}`);
+    throw new Error(`Bunny Upload Error: ${response.status} - ${errorText}`);
+  }
+
+  // URL pública via CDN Pull Zone
+  return `${BUNNY_CDN_URL}/${filePath}`;
+}
+
+/**
+ * Deletar arquivo do Bunny CDN Storage
+ * DELETE https://{region}.storage.bunnycdn.com/{storageZoneName}/{path}/{fileName}
+ */
+async function deleteFromBunny(filePath: string): Promise<void> {
+  const url = `${BUNNY_STORAGE_URL}/${filePath}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'AccessKey': BUNNY_ACCESS_KEY,
+      },
+    });
+
+    // 404 = arquivo já não existe, consideramos sucesso
+    if (!response.ok && response.status !== 404) {
+      console.warn(`[Bunny] Falha ao deletar ${filePath}: ${response.status}`);
+    }
+  } catch (err) {
+    console.warn('[Bunny] Erro ao deletar:', err);
+  }
+}
+
+/**
+ * Extrair o path relativo de uma URL pública do Bunny CDN
+ * Ex: https://leona-storage.b-cdn.net/boards/123/file.png → boards/123/file.png
+ */
+function extractBunnyPath(publicUrl: string): string {
+  if (publicUrl.startsWith(BUNNY_CDN_URL)) {
+    return publicUrl.replace(`${BUNNY_CDN_URL}/`, '');
+  }
+  if (publicUrl.startsWith(BUNNY_STORAGE_URL)) {
+    return publicUrl.replace(`${BUNNY_STORAGE_URL}/`, '');
+  }
+  // Fallback: pegar tudo depois do hostname
+  try {
+    const u = new URL(publicUrl);
+    return u.pathname.replace(/^\//, '');
+  } catch {
+    return publicUrl;
+  }
+}
+
+/** Upload de imagem/arquivo para o Bunny CDN */
 export async function uploadTaskImage(
   boardId: string,
   taskId: string,
   file: File
 ): Promise<string> {
   const ext = file.name?.split('.').pop() || 'png';
-  const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const filePath = `${boardId}/${taskId}/${fileName}`;
+  const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const filePath = `boards/${boardId}/${taskId}/${safeName}`;
 
-  const { error } = await supabase.storage
-    .from('task-attachments')
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (error) throw error;
-
-  // Gerar URL pública
-  const { data: urlData } = supabase.storage
-    .from('task-attachments')
-    .getPublicUrl(filePath);
-
-  return urlData.publicUrl;
+  return uploadToBunny(filePath, file);
 }
 
 /** Upload de imagem de clipboard (paste) */
@@ -56,10 +119,11 @@ export async function registerAttachment(attachment: {
   return data;
 }
 
-/** Excluir attachment */
-export async function deleteAttachment(id: string, filePath: string) {
-  // Remover do storage
-  await supabase.storage.from('task-attachments').remove([filePath]);
+/** Excluir attachment (banco + Bunny CDN) */
+export async function deleteAttachment(id: string, fileUrl: string) {
+  // Remover do Bunny CDN
+  const filePath = extractBunnyPath(fileUrl);
+  await deleteFromBunny(filePath);
 
   // Remover do banco
   const { error } = await supabase

@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Drawer, Select, ActionIcon, Text, Group, Stack, Badge, Textarea, Combobox, useCombobox, TextInput, InputBase } from '@mantine/core';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Drawer, Select, ActionIcon, Text, Group, Stack, Badge, Textarea, Combobox, useCombobox, TextInput, InputBase, Menu, FileButton, Loader } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
-import { IconUser, IconTag, IconCalendar, IconFlame, IconTrash, IconColumns3 } from '@tabler/icons-react';
+import {
+  IconUser, IconTag, IconCalendar, IconFlame, IconTrash, IconColumns3,
+  IconDots, IconLink, IconArrowsMaximize, IconArrowsMinimize,
+  IconPaperclip, IconUpload, IconFile, IconPhoto, IconX, IconDownload,
+} from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import * as taskService from '@/services/taskService';
 import { getOrCreateTaskType } from '@/services/taskTypeService';
-import { uploadClipboardImage, registerAttachment } from '@/services/storageService';
-import type { Task, BoardColumn, Profile, TaskComment, TaskType } from '@/types';
+import { uploadTaskImage, uploadClipboardImage, registerAttachment, deleteAttachment } from '@/services/storageService';
+import type { Task, BoardColumn, Profile, TaskComment, TaskType, TaskAttachment } from '@/types';
 import { PRIORITY_CONFIG } from '@/types';
 import RichEditor from '../shared/RichEditor';
 import ImageLightbox from '../shared/ImageLightbox';
@@ -35,6 +39,13 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState('');
 
+  // Expand mode (fullscreen drawer)
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // File upload
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Autocomplete task type
   const [typeSearch, setTypeSearch] = useState('');
   const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
@@ -58,6 +69,11 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     }
   }, [task?.id]);
 
+  // Reset expanded state when drawer closes
+  useEffect(() => {
+    if (!opened) setIsExpanded(false);
+  }, [opened]);
+
   const saveField = useCallback(async (field: string, value: any) => {
     if (!task) return;
     try { await taskService.updateTask(task.id, { [field]: value }); onUpdate(); } catch (err) { console.error(`[TaskDrawer] save ${field}:`, err); }
@@ -72,7 +88,6 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     setTaskType(typeName);
     setTypeSearch(typeName);
     combobox.closeDropdown();
-    // Criar se não existe
     try {
       await getOrCreateTaskType(typeName);
       saveField('task_type', typeName);
@@ -95,8 +110,50 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     }
   };
 
+  /** Upload de arquivos genéricos via botão */
+  const handleFileUpload = async (files: File[]) => {
+    if (!task || !boardId || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const url = await uploadTaskImage(boardId, task.id, file);
+        await registerAttachment({
+          task_id: task.id,
+          file_url: url,
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          uploaded_by: user?.id,
+        });
+      }
+      onUpdate();
+      notifications.show({
+        title: 'Arquivo(s) anexado(s)',
+        message: `${files.length} arquivo(s) enviado(s) com sucesso`,
+        color: 'green',
+      });
+    } catch (err) {
+      console.error('[TaskDrawer] Upload error:', err);
+      notifications.show({ title: 'Erro', message: 'Falha ao enviar arquivo(s)', color: 'red' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /** Deletar um anexo */
+  const handleDeleteAttachment = async (att: TaskAttachment) => {
+    if (!task) return;
+    try {
+      await deleteAttachment(att.id, att.file_url);
+      onUpdate();
+      notifications.show({ title: 'Removido', message: 'Anexo removido', color: 'gray' });
+    } catch (err) {
+      notifications.show({ title: 'Erro', message: 'Erro ao remover anexo', color: 'red' });
+    }
+  };
+
   const handleImageClick = (src: string) => {
-    const images = task?.attachments?.map((a) => a.file_url) || [];
+    const images = task?.attachments?.filter((a) => a.file_type?.startsWith('image/')).map((a) => a.file_url) || [];
     if (images.length === 0) images.push(src);
     setLightboxImages(images);
     setLightboxIndex(Math.max(0, images.indexOf(src)));
@@ -125,7 +182,40 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     }
   };
 
+  /** Copiar link da tarefa para clipboard */
+  const handleCopyLink = () => {
+    if (!task) return;
+    const url = `${window.location.origin}/board?task=${task.id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      notifications.show({ title: 'Link copiado', message: 'O link da tarefa foi copiado para a área de transferência', color: 'violet' });
+    }).catch(() => {
+      // Fallback
+      const input = document.createElement('input');
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      notifications.show({ title: 'Link copiado', message: 'O link da tarefa foi copiado', color: 'violet' });
+    });
+  };
+
   const getInitials = (name: string) => name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+
+  /** Verifica se o anexo é imagem */
+  const isImageFile = (att: TaskAttachment) => {
+    if (att.file_type?.startsWith('image/')) return true;
+    const ext = att.file_name?.split('.').pop()?.toLowerCase();
+    return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext || '');
+  };
+
+  /** Formatar tamanho de arquivo */
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   // Filtrar task types para o autocomplete
   const filteredTypes = typeSearch.trim()
@@ -136,21 +226,58 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
 
   if (!task) return null;
 
+  const attachments = task.attachments || [];
+  const imageAttachments = attachments.filter(isImageFile);
+  const fileAttachments = attachments.filter((a) => !isImageFile(a));
+
   return (
     <>
-      <Drawer opened={opened} onClose={onClose} position="right" size="lg" withCloseButton
+      <Drawer
+        opened={opened}
+        onClose={onClose}
+        position="right"
+        size={isExpanded ? '100%' : 'lg'}
+        withCloseButton={false}
         overlayProps={{ backgroundOpacity: 0.4, blur: 3 }}
         styles={{
-          content: { backgroundColor: 'var(--bg-surface)' },
-          header: { backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' },
+          content: { backgroundColor: 'var(--bg-surface)', transition: 'width 300ms ease' },
+          header: { backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '10px 16px' },
           body: { padding: 0 },
         }}
         title={
-          <Group gap="xs">
+          <Group gap="xs" justify="space-between" w="100%">
             <Badge size="sm" variant="light" color="violet">Tarefa</Badge>
-            <ActionIcon variant="subtle" color="red" size="sm" onClick={handleDelete} title="Excluir tarefa">
-              <IconTrash size={14} />
-            </ActionIcon>
+
+            <Group gap={4}>
+              {/* Expand / Minimize */}
+              <ActionIcon
+                variant="subtle"
+                color="gray"
+                size="sm"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                title={isExpanded ? 'Minimizar' : 'Expandir'}
+              >
+                {isExpanded ? <IconArrowsMinimize size={15} /> : <IconArrowsMaximize size={15} />}
+              </ActionIcon>
+
+              {/* Actions dropdown */}
+              <Menu shadow="md" width={180} position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon variant="subtle" color="gray" size="sm" title="Ações">
+                    <IconDots size={15} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item leftSection={<IconLink size={14} />} onClick={handleCopyLink}>
+                    Copiar Link
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={handleDelete}>
+                    Excluir
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Group>
           </Group>
         }
       >
@@ -258,19 +385,132 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
             onImageClick={handleImageClick} placeholder="Descreva a tarefa... Cole imagens com Ctrl+V" />
         </div>
 
-        {/* Attachments */}
-        {task.attachments && task.attachments.length > 0 && (
-          <div style={{ padding: '0 24px 16px' }}>
-            <Text size="sm" fw={600} mb="xs" c="var(--text-primary)">Anexos ({task.attachments.length})</Text>
+        {/* File Upload Area */}
+        <div className="task-drawer-attachments">
+          <div className="task-drawer-attachments-header">
             <Group gap="xs">
-              {task.attachments.map((att) => (
-                <img key={att.id} src={att.file_url} alt={att.file_name || 'Anexo'}
-                  style={{ width: 80, height: 60, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--border-subtle)' }}
-                  onClick={() => handleImageClick(att.file_url)} />
-              ))}
+              <IconPaperclip size={15} />
+              <Text size="sm" fw={600} c="var(--text-primary)">
+                Anexos {attachments.length > 0 && `(${attachments.length})`}
+              </Text>
             </Group>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    handleFileUpload(Array.from(files));
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <ActionIcon
+                variant="light"
+                color="violet"
+                size="sm"
+                loading={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                title="Anexar arquivo"
+              >
+                <IconUpload size={14} />
+              </ActionIcon>
+            </div>
           </div>
-        )}
+
+          {/* Upload drop zone */}
+          <div
+            className="task-drawer-upload-zone"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }}
+            onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.currentTarget.classList.remove('drag-over');
+              const files = e.dataTransfer?.files;
+              if (files && files.length > 0) handleFileUpload(Array.from(files));
+            }}
+          >
+            {uploading ? (
+              <Group gap="xs" justify="center">
+                <Loader size="xs" color="violet" />
+                <Text size="xs" c="dimmed">Enviando...</Text>
+              </Group>
+            ) : (
+              <Group gap="xs" justify="center">
+                <IconUpload size={16} color="var(--text-muted)" />
+                <Text size="xs" c="dimmed">Arraste arquivos ou clique para anexar</Text>
+              </Group>
+            )}
+          </div>
+
+          {/* Image thumbnails */}
+          {imageAttachments.length > 0 && (
+            <div className="task-drawer-image-grid">
+              {imageAttachments.map((att) => (
+                <div key={att.id} className="task-drawer-image-item">
+                  <img
+                    src={att.file_url}
+                    alt={att.file_name || 'Imagem'}
+                    onClick={() => handleImageClick(att.file_url)}
+                  />
+                  <ActionIcon
+                    className="task-drawer-image-delete"
+                    variant="filled"
+                    color="dark"
+                    size="xs"
+                    radius="xl"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(att); }}
+                  >
+                    <IconX size={10} />
+                  </ActionIcon>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* File list (non-image) */}
+          {fileAttachments.length > 0 && (
+            <Stack gap={4} mt="xs">
+              {fileAttachments.map((att) => (
+                <div key={att.id} className="task-drawer-file-item">
+                  <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+                    <IconFile size={16} color="var(--accent-violet)" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="xs" fw={500} c="var(--text-primary)" truncate>{att.file_name || 'Arquivo'}</Text>
+                      <Text size="xs" c="dimmed">{formatFileSize(att.file_size)}</Text>
+                    </div>
+                  </Group>
+                  <Group gap={4}>
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      size="xs"
+                      component="a"
+                      href={att.file_url}
+                      target="_blank"
+                      title="Baixar"
+                    >
+                      <IconDownload size={12} />
+                    </ActionIcon>
+                    <ActionIcon
+                      variant="subtle"
+                      color="red"
+                      size="xs"
+                      onClick={() => handleDeleteAttachment(att)}
+                      title="Remover"
+                    >
+                      <IconX size={12} />
+                    </ActionIcon>
+                  </Group>
+                </div>
+              ))}
+            </Stack>
+          )}
+        </div>
 
         {/* Comments */}
         <div style={{ padding: '0 24px 24px' }}>

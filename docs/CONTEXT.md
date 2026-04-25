@@ -60,9 +60,15 @@ Plataforma de gestão de tarefas PWA inspirada no Notion, com tema 100% dark e c
 
 ## Features Supabase em Uso
 - **Auth**: Email/password login (sem self-registration)
-- **Storage**: Bucket `task-attachments` para imagens do editor
 - **Realtime**: Sync do Kanban entre usuários
 - **RLS**: Segurança por role (admin/operacao)
 - **Triggers**: Auto-create profile, auto-update timestamps
 - **Edge Functions**: (Futuro) Notificações, webhooks
 - **pg_cron**: (Futuro) Alertas de prazo, limpeza de dados
+
+## Bunny CDN — Storage de Arquivos
+- **Storage Zone**: `leona-storage` (região: Brasil)
+- **Upload API**: `PUT https://br.storage.bunnycdn.com/leona-storage/{path}/{fileName}`
+- **CDN URL**: `https://leona-storage.b-cdn.net/{path}/{fileName}`
+- **Uso**: Upload de imagens do editor TipTap e anexos de tarefas
+- **Credenciais**: Armazenadas em `.env` (`VITE_BUNNY_*`)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button, TextInput, ColorInput, Modal, ActionIcon, Menu, Badge, Group, Switch, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -8,7 +9,7 @@ import {
 } from '@tabler/icons-react';
 import {
   DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor,
-  useSensor, useSensors,
+  useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -43,7 +44,7 @@ function saveHiddenCols(ids: string[]) { try { sessionStorage.setItem(HIDDEN_COL
 /** Sortable Task Card wrapper */
 function SortableTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: task.id, data: { type: 'task', task } });
+    useSortable({ id: task.id, data: { type: 'task', task, columnId: task.column_id } });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -52,8 +53,31 @@ function SortableTaskCard({ task, onClick }: { task: Task; onClick: () => void }
   );
 }
 
+/** Droppable Column wrapper — registra a coluna como drop target */
+function DroppableColumn({ columnId, children }: { columnId: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `column-${columnId}`,
+    data: { type: 'column', columnId },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className="kanban-column-body"
+      style={{
+        minHeight: 60,
+        background: isOver ? 'rgba(124, 58, 237, 0.06)' : undefined,
+        borderRadius: isOver ? 6 : undefined,
+        transition: 'background 200ms ease',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function KanbanBoard() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [board, setBoard] = useState<Board | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -127,6 +151,20 @@ export default function KanbanBoard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Deep-link: abrir tarefa via ?task=<id>
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    if (taskId && tasks.length > 0 && !drawerOpened) {
+      const found = tasks.find((t) => t.id === taskId);
+      if (found) {
+        setSelectedTask(found);
+        openDrawer();
+        // Limpar o param da URL sem recarregar
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, tasks, drawerOpened]);
+
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -145,6 +183,21 @@ export default function KanbanBoard() {
 
   const activeFilterCount = [filters.assignedTo, filters.priority, filters.taskType, filters.dateFrom, filters.dateTo].filter(Boolean).length;
   const visibleColumns = columns.filter((c) => !hiddenCols.includes(c.id));
+
+  // --- Helpers para extrair columnId de um droppable/sortable ---
+  const resolveColumnId = (id: string): string | null => {
+    // Se é um id de coluna droppable (format: "column-{uuid}")
+    if (typeof id === 'string' && id.startsWith('column-')) {
+      return id.replace('column-', '');
+    }
+    // Se é um id de task, retornar o column_id da task
+    const task = tasks.find((t) => t.id === id);
+    if (task) return task.column_id;
+    // Se é diretamente um id de coluna
+    const col = columns.find((c) => c.id === id);
+    if (col) return col.id;
+    return null;
+  };
 
   // Column CRUD
   const handleSaveColumn = async () => {
@@ -172,35 +225,138 @@ export default function KanbanBoard() {
     } catch { notifications.show({ title: 'Erro', message: 'Erro ao criar tarefa', color: 'red' }); }
   };
 
-  // Drag handlers
-  const handleDragStart = (event: DragStartEvent) => { const t = tasks.find((t) => t.id === event.active.id); if (t) setActiveTask(t); };
+  // ======================================================
+  // DnD Handlers — Reescritos para suportar cross-column
+  // ======================================================
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const t = tasks.find((t) => t.id === event.active.id);
+    if (t) setActiveTask(t);
+  };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event; if (!over) return;
-    const activeId = active.id as string; const overId = over.id as string;
-    const at = tasks.find((t) => t.id === activeId); if (!at) return;
-    const overColumn = columns.find((c) => c.id === overId);
-    if (overColumn && at.column_id !== overColumn.id) { setTasks((prev) => prev.map((t) => t.id === activeId ? { ...t, column_id: overColumn.id } : t)); return; }
-    const overTask = tasks.find((t) => t.id === overId);
-    if (overTask && at.column_id !== overTask.column_id) { setTasks((prev) => prev.map((t) => t.id === activeId ? { ...t, column_id: overTask.column_id } : t)); }
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Determinar a coluna de origem e destino
+    const activeColumnId = active.data?.current?.columnId || tasks.find((t) => t.id === activeId)?.column_id;
+    const overColumnId = resolveColumnId(overId);
+
+    if (!activeColumnId || !overColumnId || activeColumnId === overColumnId) return;
+
+    // Mover o card visualmente para a nova coluna (state local)
+    setTasks((prev) => {
+      const activeTaskData = prev.find((t) => t.id === activeId);
+      if (!activeTaskData) return prev;
+
+      // Remover da coluna de origem e calcular novas posições
+      const sourceTasks = prev.filter((t) => t.column_id === activeColumnId && t.id !== activeId);
+      const destTasks = prev.filter((t) => t.column_id === overColumnId);
+
+      // Encontrar a posição de inserção no destino
+      const overTask = prev.find((t) => t.id === overId);
+      let insertIndex = destTasks.length; // padrão: final da coluna
+      if (overTask && overTask.column_id === overColumnId) {
+        insertIndex = destTasks.findIndex((t) => t.id === overId);
+        if (insertIndex < 0) insertIndex = destTasks.length;
+      }
+
+      // Inserir na posição correta
+      const newDestTasks = [...destTasks];
+      newDestTasks.splice(insertIndex, 0, { ...activeTaskData, column_id: overColumnId });
+
+      // Recalcular positions para source e dest
+      const updatedSource = sourceTasks.map((t, i) => ({ ...t, position: i }));
+      const updatedDest = newDestTasks.map((t, i) => ({ ...t, position: i }));
+
+      // Reconstruir a lista completa
+      const otherTasks = prev.filter((t) => t.column_id !== activeColumnId && t.column_id !== overColumnId);
+      return [...otherTasks, ...updatedSource, ...updatedDest];
+    });
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event; setActiveTask(null); if (!over) return;
-    const activeId = active.id as string; const overId = over.id as string;
-    const at = tasks.find((t) => t.id === activeId); if (!at) return;
-    let targetColumnId = at.column_id;
-    const overColumn = columns.find((c) => c.id === overId); const overTask = tasks.find((t) => t.id === overId);
-    if (overColumn) targetColumnId = overColumn.id; else if (overTask) targetColumnId = overTask.column_id;
-    const columnTasks = tasks.filter((t) => t.column_id === targetColumnId).sort((a, b) => a.position - b.position);
+    const { active, over } = event;
+    setActiveTask(null);
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Determinar coluna de destino
+    const targetColumnId = resolveColumnId(overId);
+    if (!targetColumnId) return;
+
+    // Buscar a task ativa no state atualizado (pode já ter sido movida pelo handleDragOver)
+    const activeTaskData = tasks.find((t) => t.id === activeId);
+    if (!activeTaskData) return;
+
+    // Obter tasks na coluna de destino, ordenadas
+    const columnTasks = tasks
+      .filter((t) => t.column_id === targetColumnId)
+      .sort((a, b) => a.position - b.position);
+
     const oldIndex = columnTasks.findIndex((t) => t.id === activeId);
-    const newIndex = overTask ? columnTasks.findIndex((t) => t.id === overId) : columnTasks.length;
-    if (oldIndex !== -1 && newIndex !== -1) {
+    const overTask = columnTasks.find((t) => t.id === overId);
+    const newIndex = overTask ? columnTasks.findIndex((t) => t.id === overId) : columnTasks.length - 1;
+
+    // Cenário 1: Reordenação na mesma coluna
+    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
       const reordered = arrayMove(columnTasks, oldIndex, newIndex);
-      setTasks((prev) => { const other = prev.filter((t) => t.column_id !== targetColumnId); return [...other, ...reordered.map((t, i) => ({ ...t, position: i, column_id: targetColumnId! }))]; });
-      try { await taskService.reorderTasks(reordered.map((t, i) => ({ id: t.id, position: i, column_id: targetColumnId! }))); } catch (err) { console.error(err); }
-    } else if (targetColumnId !== (active.data?.current as any)?.task?.column_id) {
-      try { await taskService.moveTask(activeId, targetColumnId!, 0); } catch (err) { console.error(err); }
+      const reorderedWithPositions = reordered.map((t, i) => ({ ...t, position: i, column_id: targetColumnId }));
+
+      setTasks((prev) => {
+        const otherTasks = prev.filter((t) => t.column_id !== targetColumnId);
+        return [...otherTasks, ...reorderedWithPositions];
+      });
+
+      try {
+        await taskService.reorderTasks(reorderedWithPositions.map((t, i) => ({
+          id: t.id, position: i, column_id: targetColumnId,
+        })));
+      } catch (err) {
+        console.error('[KanbanBoard] Erro ao reordenar:', err);
+      }
+      return;
+    }
+
+    // Cenário 2: Card já foi movido entre colunas pelo handleDragOver
+    // Precisamos persistir as posições de ambas as colunas afetadas
+    const originalColumnId = (active.data?.current as any)?.columnId;
+    if (originalColumnId && originalColumnId !== targetColumnId) {
+      // Persistir as posições da coluna de origem
+      const sourceColumnTasks = tasks
+        .filter((t) => t.column_id === originalColumnId)
+        .sort((a, b) => a.position - b.position);
+
+      // Persistir as posições da coluna de destino
+      const destColumnTasks = tasks
+        .filter((t) => t.column_id === targetColumnId)
+        .sort((a, b) => a.position - b.position);
+
+      const allUpdates = [
+        ...sourceColumnTasks.map((t, i) => ({ id: t.id, position: i, column_id: originalColumnId })),
+        ...destColumnTasks.map((t, i) => ({ id: t.id, position: i, column_id: targetColumnId })),
+      ];
+
+      try {
+        await taskService.reorderTasks(allUpdates);
+      } catch (err) {
+        console.error('[KanbanBoard] Erro ao persistir movimentação:', err);
+      }
+      return;
+    }
+
+    // Cenário 3: Drop em coluna vazia (sem reordenação, apenas mover)
+    if (oldIndex === -1 && targetColumnId) {
+      try {
+        await taskService.moveTask(activeId, targetColumnId, 0);
+      } catch (err) {
+        console.error('[KanbanBoard] Erro ao mover para coluna vazia:', err);
+      }
     }
   };
 
@@ -331,12 +487,12 @@ export default function KanbanBoard() {
                   </Menu>
                 </div>
 
-                <SortableContext items={colTasks.map((t) => t.id)} strategy={verticalListSortingStrategy} id={col.id}>
-                  <div className="kanban-column-body" id={col.id}>
+                <SortableContext items={colTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  <DroppableColumn columnId={col.id}>
                     {colTasks.map((task) => (
                       <SortableTaskCard key={task.id} task={task} onClick={() => { setSelectedTask(task); openDrawer(); }} />
                     ))}
-                  </div>
+                  </DroppableColumn>
                 </SortableContext>
 
                 <button className="kanban-add-task" onClick={() => handleAddTask(col.id)}>

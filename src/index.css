@@ -337,6 +337,47 @@ body {
 .task-drawer-editor { padding: 16px 24px; }
 .task-drawer-editor-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; }
 
+/* Task Drawer — Attachments */
+.task-drawer-attachments {
+  padding: 16px 24px; border-top: 1px solid var(--border-subtle);
+}
+.task-drawer-attachments-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+}
+.task-drawer-upload-zone {
+  border: 1px dashed var(--border-light); border-radius: 8px;
+  padding: 14px 16px; cursor: pointer;
+  transition: all var(--transition-fast); text-align: center;
+}
+.task-drawer-upload-zone:hover,
+.task-drawer-upload-zone.drag-over {
+  border-color: var(--accent-violet); background: var(--accent-violet-glow);
+}
+.task-drawer-image-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;
+}
+.task-drawer-image-item {
+  position: relative; width: 80px; height: 60px; border-radius: 6px; overflow: hidden;
+  border: 1px solid var(--border-subtle); cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+.task-drawer-image-item:hover { border-color: var(--accent-violet); }
+.task-drawer-image-item img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.task-drawer-image-delete {
+  position: absolute; top: 3px; right: 3px;
+  opacity: 0; transition: opacity var(--transition-fast);
+}
+.task-drawer-image-item:hover .task-drawer-image-delete { opacity: 1; }
+.task-drawer-file-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; background: var(--bg-primary);
+  border: 1px solid var(--border-subtle); border-radius: 6px;
+  transition: border-color var(--transition-fast);
+}
+.task-drawer-file-item:hover { border-color: var(--border-light); }
+
 /* ============================================ */
 /* Lightbox                                     */
 /* ============================================ */
