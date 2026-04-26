@@ -1,29 +1,38 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL) {
-  throw new Error('SUPABASE_URL env var is required');
-}
-if (!SUPABASE_ANON_KEY) {
-  throw new Error('SUPABASE_ANON_KEY env var is required');
-}
-if (!SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY env var is required');
+/** Lê envs de forma lazy (dentro do handler, não no import) pra evitar
+ *  crash de boot que faz a Vercel Function travar em loop infinito. */
+function getEnvs() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return { url, anon, service };
 }
 
 /** Cliente admin (service role) — só pode ser usado em código server-side */
 export function getAdminClient(): SupabaseClient {
-  return createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!, {
+  const { url, service } = getEnvs();
+  if (!url || !service) {
+    throw new Response(
+      JSON.stringify({ error: 'Server misconfigured: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY' }),
+      { status: 500, headers: { 'content-type': 'application/json' } }
+    );
+  }
+  return createClient(url, service, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
 
 /** Cliente público — usado para validar o JWT do caller */
 function getAnonClient(): SupabaseClient {
-  return createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+  const { url, anon } = getEnvs();
+  if (!url || !anon) {
+    throw new Response(
+      JSON.stringify({ error: 'Server misconfigured: missing SUPABASE_URL or SUPABASE_ANON_KEY' }),
+      { status: 500, headers: { 'content-type': 'application/json' } }
+    );
+  }
+  return createClient(url, anon, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
@@ -47,14 +56,22 @@ export async function requireUser(req: Request): Promise<AuthedUser> {
   const token = auth.slice(7).trim();
   if (!token) throw jsonError(401, 'Empty bearer token');
 
-  const anon = getAnonClient();
+  let anon: SupabaseClient;
+  let admin: SupabaseClient;
+  try {
+    anon = getAnonClient();
+    admin = getAdminClient();
+  } catch (resp) {
+    if (resp instanceof Response) throw resp;
+    throw jsonError(500, 'Server misconfigured');
+  }
+
   const { data: userData, error: userErr } = await anon.auth.getUser(token);
   if (userErr || !userData?.user) {
     throw jsonError(401, 'Invalid session token');
   }
   const user = userData.user;
 
-  const admin = getAdminClient();
   const { data: profile, error: profileErr } = await admin
     .from('profiles')
     .select('id,email,role,full_name,is_active')
