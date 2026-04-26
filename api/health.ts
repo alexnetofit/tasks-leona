@@ -1,3 +1,5 @@
+export const config = { runtime: 'edge' };
+
 /** Endpoint de diagnóstico — confirma se as functions Vercel sobem
  *  e se as env vars críticas estão setadas (sem expor os valores). */
 export default async function handler(_req: Request): Promise<Response> {

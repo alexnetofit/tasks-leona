@@ -1,16 +1,13 @@
 import { requireUser, jsonOk, jsonError, readJson } from '../../_shared/admin.js';
 
-
-const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
-const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;
-const BUNNY_CDN_URL = process.env.BUNNY_CDN_URL;
+export const config = { runtime: 'edge' };
 
 type Payload = { path?: string; url?: string };
 
 /** Extrai o caminho relativo a partir de uma URL pública ou storage URL */
-function extractPath(input: string): string | null {
-  const cdn = (BUNNY_CDN_URL || '').replace(/\/$/, '');
-  const storage = (BUNNY_STORAGE_URL || '').replace(/\/$/, '');
+function extractPath(input: string, cdnUrl: string, storageUrl: string): string | null {
+  const cdn = (cdnUrl || '').replace(/\/$/, '');
+  const storage = (storageUrl || '').replace(/\/$/, '');
 
   if (cdn && input.startsWith(cdn + '/')) return input.slice(cdn.length + 1);
   if (storage && input.startsWith(storage + '/')) return input.slice(storage.length + 1);
@@ -37,6 +34,10 @@ function isSafePath(p: string): boolean {
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return jsonError(405, 'Method not allowed');
 
+  const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
+  const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;
+  const BUNNY_CDN_URL = process.env.BUNNY_CDN_URL;
+
   if (!BUNNY_STORAGE_URL || !BUNNY_ACCESS_KEY) {
     return jsonError(500, 'Bunny CDN env vars not configured on server');
   }
@@ -56,7 +57,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   let filePath = body.path;
   if (!filePath && body.url) {
-    filePath = extractPath(body.url) || undefined;
+    filePath = extractPath(body.url, BUNNY_CDN_URL || '', BUNNY_STORAGE_URL) || undefined;
   }
 
   if (!filePath || !isSafePath(filePath)) {

@@ -1,9 +1,6 @@
 import { requireUser, jsonOk, jsonError } from '../../_shared/admin.js';
 
-
-const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
-const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;
-const BUNNY_CDN_URL = process.env.BUNNY_CDN_URL;
+export const config = { runtime: 'edge' };
 
 const ALLOWED_MIME = new Set([
   'image/png',
@@ -41,6 +38,10 @@ function pickExtension(filename: string | undefined, mime: string): string {
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return jsonError(405, 'Method not allowed');
+
+  const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
+  const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;
+  const BUNNY_CDN_URL = process.env.BUNNY_CDN_URL;
 
   if (!BUNNY_STORAGE_URL || !BUNNY_ACCESS_KEY || !BUNNY_CDN_URL) {
     return jsonError(500, 'Bunny CDN env vars not configured on server');

@@ -1,5 +1,6 @@
 import { requireAdmin, getAdminClient, jsonOk, jsonError, readJson } from '../../_shared/admin.js';
 
+export const config = { runtime: 'edge' };
 
 type Payload = {
   email?: string;
