@@ -62,13 +62,8 @@ function DroppableColumn({ columnId, children }: { columnId: string; children: R
   return (
     <div
       ref={setNodeRef}
-      className="kanban-column-body"
-      style={{
-        minHeight: 60,
-        background: isOver ? 'rgba(124, 58, 237, 0.06)' : undefined,
-        borderRadius: isOver ? 6 : undefined,
-        transition: 'background 200ms ease',
-      }}
+      className={`kanban-column-body${isOver ? ' is-over' : ''}`}
+      style={{ minHeight: 60 }}
     >
       {children}
     </div>
