@@ -36,10 +36,10 @@ export type AuthedUser = {
 };
 
 /**
- * Garante que o request vem de um usuário autenticado COM role=admin.
+ * Garante que o request vem de um usuário autenticado e ativo (qualquer role).
  * Lança Response 401/403 se não for o caso.
  */
-export async function requireAdmin(req: Request): Promise<AuthedUser> {
+export async function requireUser(req: Request): Promise<AuthedUser> {
   const auth = req.headers.get('authorization') || req.headers.get('Authorization');
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
     throw jsonError(401, 'Missing or invalid Authorization header');
@@ -67,9 +67,6 @@ export async function requireAdmin(req: Request): Promise<AuthedUser> {
   if (!profile.is_active) {
     throw jsonError(403, 'Account is deactivated');
   }
-  if (profile.role !== 'admin') {
-    throw jsonError(403, 'Admin role required');
-  }
 
   return {
     id: profile.id,
@@ -77,6 +74,17 @@ export async function requireAdmin(req: Request): Promise<AuthedUser> {
     role: profile.role,
     full_name: profile.full_name,
   };
+}
+
+/**
+ * Garante que o request vem de um usuário autenticado COM role=admin.
+ */
+export async function requireAdmin(req: Request): Promise<AuthedUser> {
+  const user = await requireUser(req);
+  if (user.role !== 'admin') {
+    throw jsonError(403, 'Admin role required');
+  }
+  return user;
 }
 
 export function jsonError(status: number, message: string): Response {

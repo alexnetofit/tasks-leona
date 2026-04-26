@@ -1,93 +1,58 @@
 import { supabase } from '@/config/supabase';
 
-const BUNNY_STORAGE_URL = import.meta.env.VITE_BUNNY_STORAGE_URL || 'https://ny.storage.bunnycdn.com/leonastorage';
-const BUNNY_ACCESS_KEY = import.meta.env.VITE_BUNNY_ACCESS_KEY || '';
-const BUNNY_CDN_URL = import.meta.env.VITE_BUNNY_CDN_URL || 'https://leona-flow.b-cdn.net';
+/** Helper: pega o JWT da sessão atual */
+async function getAuthHeader(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Você precisa estar autenticado.');
+  return `Bearer ${session.access_token}`;
+}
 
-/**
- * Upload de arquivo para o Bunny CDN Storage
- * PUT https://{region}.storage.bunnycdn.com/{storageZoneName}/{path}/{fileName}
- *
- * NOTA: Bunny Storage aceita CORS para PUT de qualquer origem.
- * A Pull Zone deve estar configurada no painel Bunny para servir os arquivos publicamente.
- */
-async function uploadToBunny(filePath: string, file: File | Blob): Promise<string> {
-  const url = `${BUNNY_STORAGE_URL}/${filePath}`;
+/** Upload de arquivo via Vercel Function — a access key do Bunny fica no servidor */
+async function uploadViaApi(
+  boardId: string,
+  taskId: string,
+  file: File | Blob,
+  fileName?: string
+): Promise<string> {
+  const auth = await getAuthHeader();
+  const form = new FormData();
+  const fileToSend =
+    file instanceof File ? file : new File([file], fileName || `paste_${Date.now()}.png`, { type: file.type });
+  form.append('file', fileToSend);
+  form.append('boardId', boardId);
+  form.append('taskId', taskId);
 
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'AccessKey': BUNNY_ACCESS_KEY,
-      'Content-Type': file.type || 'application/octet-stream',
-    },
-    body: file,
+  const res = await fetch('/api/storage/upload', {
+    method: 'POST',
+    headers: { authorization: auth },
+    body: form,
   });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error');
-    console.error(`[Bunny] Upload failed: ${response.status} - ${errorText}`);
-    throw new Error(`Bunny Upload Error: ${response.status} - ${errorText}`);
-  }
-
-  // URL pública via CDN Pull Zone
-  return `${BUNNY_CDN_URL}/${filePath}`;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || `Upload falhou (${res.status})`);
+  return json.url as string;
 }
 
-/**
- * Deletar arquivo do Bunny CDN Storage
- * DELETE https://{region}.storage.bunnycdn.com/{storageZoneName}/{path}/{fileName}
- */
-async function deleteFromBunny(filePath: string): Promise<void> {
-  const url = `${BUNNY_STORAGE_URL}/${filePath}`;
-
-  try {
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'AccessKey': BUNNY_ACCESS_KEY,
-      },
-    });
-
-    // 404 = arquivo já não existe, consideramos sucesso
-    if (!response.ok && response.status !== 404) {
-      console.warn(`[Bunny] Falha ao deletar ${filePath}: ${response.status}`);
-    }
-  } catch (err) {
-    console.warn('[Bunny] Erro ao deletar:', err);
+/** Delete via Vercel Function */
+async function deleteViaApi(fileUrl: string): Promise<void> {
+  const auth = await getAuthHeader();
+  const res = await fetch('/api/storage/delete', {
+    method: 'POST',
+    headers: { authorization: auth, 'content-type': 'application/json' },
+    body: JSON.stringify({ url: fileUrl }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    console.warn('[storageService] delete falhou:', json?.error || res.status);
   }
 }
 
-/**
- * Extrair o path relativo de uma URL pública do Bunny CDN
- * Ex: https://leona-storage.b-cdn.net/boards/123/file.png → boards/123/file.png
- */
-function extractBunnyPath(publicUrl: string): string {
-  if (publicUrl.startsWith(BUNNY_CDN_URL)) {
-    return publicUrl.replace(`${BUNNY_CDN_URL}/`, '');
-  }
-  if (publicUrl.startsWith(BUNNY_STORAGE_URL)) {
-    return publicUrl.replace(`${BUNNY_STORAGE_URL}/`, '');
-  }
-  // Fallback: pegar tudo depois do hostname
-  try {
-    const u = new URL(publicUrl);
-    return u.pathname.replace(/^\//, '');
-  } catch {
-    return publicUrl;
-  }
-}
-
-/** Upload de imagem/arquivo para o Bunny CDN */
+/** Upload de imagem/arquivo */
 export async function uploadTaskImage(
   boardId: string,
   taskId: string,
   file: File
 ): Promise<string> {
-  const ext = file.name?.split('.').pop() || 'png';
-  const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const filePath = `boards/${boardId}/${taskId}/${safeName}`;
-
-  return uploadToBunny(filePath, file);
+  return uploadViaApi(boardId, taskId, file, file.name);
 }
 
 /** Upload de imagem de clipboard (paste) */
@@ -96,8 +61,7 @@ export async function uploadClipboardImage(
   taskId: string,
   blob: Blob
 ): Promise<string> {
-  const file = new File([blob], `paste_${Date.now()}.png`, { type: blob.type });
-  return uploadTaskImage(boardId, taskId, file);
+  return uploadViaApi(boardId, taskId, blob, `paste_${Date.now()}.png`);
 }
 
 /** Registrar attachment no banco */
@@ -119,13 +83,10 @@ export async function registerAttachment(attachment: {
   return data;
 }
 
-/** Excluir attachment (banco + Bunny CDN) */
+/** Excluir attachment (banco + Bunny CDN via API) */
 export async function deleteAttachment(id: string, fileUrl: string) {
-  // Remover do Bunny CDN
-  const filePath = extractBunnyPath(fileUrl);
-  await deleteFromBunny(filePath);
+  await deleteViaApi(fileUrl);
 
-  // Remover do banco
   const { error } = await supabase
     .from('task_attachments')
     .delete()

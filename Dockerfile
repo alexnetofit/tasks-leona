@@ -13,10 +13,10 @@ COPY package.json package-lock.json ./
 # Install deps
 RUN npm ci --legacy-peer-deps
 
-# Copiar código fonte (inclui .env com variáveis VITE_*)
+# Copiar código fonte (NÃO inclui .env — passe via --build-arg ou build env)
 COPY . .
 
-# Build
+# Build (variáveis VITE_* devem vir do ambiente do build, nunca do .env do repo)
 RUN npm run build
 
 # Stage 2: Serve com Nginx
