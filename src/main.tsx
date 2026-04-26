@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MantineProvider } from '@mantine/core';
+import { MantineProvider, localStorageColorSchemeManager } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -13,9 +13,15 @@ import '@mantine/notifications/styles.css';
 import '@mantine/tiptap/styles.css';
 import './index.css';
 
+const colorSchemeManager = localStorageColorSchemeManager({ key: 'leona-projetos-color-scheme' });
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="dark">
+    <MantineProvider
+      theme={theme}
+      defaultColorScheme="dark"
+      colorSchemeManager={colorSchemeManager}
+    >
       <Notifications position="top-right" />
       <BrowserRouter>
         <AuthProvider>

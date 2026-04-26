@@ -460,16 +460,20 @@ export default function KanbanBoard() {
           {visibleColumns.map((col) => {
             const colTasks = filteredTasks.filter((t) => t.column_id === col.id).sort((a, b) => a.position - b.position);
             return (
-              <div key={col.id} className="kanban-column">
+              <div
+                key={col.id}
+                className="kanban-column"
+                style={{ ['--col-color' as any]: col.color } as React.CSSProperties}
+              >
                 <div className="kanban-column-header">
                   <div className="kanban-column-title-group">
-                    <div className="kanban-column-dot" style={{ backgroundColor: col.color }} />
+                    <div className="kanban-column-dot" />
                     <span className="kanban-column-title">{col.title}</span>
                     <span className="kanban-column-count">{colTasks.length}</span>
                   </div>
                   <Menu shadow="md" width={180}>
                     <Menu.Target>
-                      <ActionIcon variant="subtle" color="gray" size="xs"><IconDots size={14} /></ActionIcon>
+                      <ActionIcon variant="subtle" color="gray" size="xs" className="kanban-column-actions"><IconDots size={14} /></ActionIcon>
                     </Menu.Target>
                     <Menu.Dropdown>
                       <Menu.Item leftSection={<IconPencil size={14} />}

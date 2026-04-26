@@ -1,9 +1,9 @@
 import { NavLink, useLocation, Outlet } from 'react-router-dom';
-import { Menu, ActionIcon, Avatar, Group, Text, Burger, Drawer, Stack } from '@mantine/core';
+import { Menu, Avatar, Text, Burger, Drawer, Stack, useMantineColorScheme } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconLayoutDashboard, IconLayoutKanban, IconUsers,
-  IconLogout, IconChevronDown,
+  IconLogout, IconChevronDown, IconSun, IconMoon,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -17,6 +17,8 @@ export default function AppLayout() {
   const { profile, signOut } = useAuth();
   const location = useLocation();
   const [mobileMenuOpened, { open: openMobile, close: closeMobile }] = useDisclosure();
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -56,8 +58,18 @@ export default function AppLayout() {
             </nav>
           </div>
 
-          {/* Right: User Menu */}
+          {/* Right: Theme Toggle + User Menu */}
           <div className="app-header-right">
+            <button
+              type="button"
+              className="app-theme-toggle"
+              onClick={toggleColorScheme}
+              title={isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+              aria-label={isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+            >
+              {isDark ? <IconSun size={16} /> : <IconMoon size={16} />}
+            </button>
+
             <Menu shadow="lg" width={200} position="bottom-end">
               <Menu.Target>
                 <button className="app-user-btn">
