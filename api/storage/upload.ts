@@ -1,10 +1,5 @@
-import { requireUser, jsonOk, jsonError } from '../_lib/admin.js';
+import { requireUser, jsonOk, jsonError } from '../../_shared/admin.js';
 
-export const config = {
-  runtime: 'nodejs',
-  // Em hobby plan o limite real é ~4.5MB; ajustamos pra 4MB pra ter folga
-  maxDuration: 30,
-} as const;
 
 const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
 const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;

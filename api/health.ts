@@ -1,5 +1,3 @@
-export const config = { runtime: 'nodejs' } as const;
-
 /** Endpoint de diagnóstico — confirma se as functions Vercel sobem
  *  e se as env vars críticas estão setadas (sem expor os valores). */
 export default async function handler(_req: Request): Promise<Response> {
@@ -19,7 +17,6 @@ export default async function handler(_req: Request): Promise<Response> {
     JSON.stringify(
       {
         ok: missing.length === 0,
-        runtime: 'nodejs',
         node: process.version,
         envs_present: envs,
         envs_missing: missing,

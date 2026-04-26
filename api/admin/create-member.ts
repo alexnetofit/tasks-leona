@@ -1,6 +1,5 @@
-import { requireAdmin, getAdminClient, jsonOk, jsonError, readJson } from '../_lib/admin.js';
+import { requireAdmin, getAdminClient, jsonOk, jsonError, readJson } from '../../_shared/admin.js';
 
-export const config = { runtime: 'nodejs' } as const;
 
 type Payload = {
   email?: string;

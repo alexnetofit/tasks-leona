@@ -1,6 +1,5 @@
-import { requireUser, jsonOk, jsonError, readJson } from '../_lib/admin.js';
+import { requireUser, jsonOk, jsonError, readJson } from '../../_shared/admin.js';
 
-export const config = { runtime: 'nodejs' } as const;
 
 const BUNNY_STORAGE_URL = process.env.BUNNY_STORAGE_URL;
 const BUNNY_ACCESS_KEY = process.env.BUNNY_ACCESS_KEY;
