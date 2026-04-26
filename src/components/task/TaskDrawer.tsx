@@ -6,6 +6,7 @@ import {
   IconUser, IconTag, IconCalendar, IconFlame, IconTrash, IconColumns3,
   IconDots, IconLink, IconMaximize, IconMinimize, IconPalette,
   IconPaperclip, IconUpload, IconFile, IconX, IconDownload,
+  IconEdit, IconCheck,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import * as taskService from '@/services/taskService';
@@ -40,6 +41,8 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState('');
 
   // Expand mode (fullscreen drawer)
   const [isExpanded, setIsExpanded] = useState(false);
@@ -183,6 +186,39 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
       setNewComment('');
     } catch (err) {
       notifications.show({ title: 'Erro', message: 'Erro ao adicionar comentário', color: 'red' });
+    }
+  };
+
+  const handleEditComment = (comment: TaskComment) => {
+    setEditingCommentId(comment.id);
+    setEditingContent(comment.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditingContent('');
+  };
+
+  const handleSaveComment = async () => {
+    if (!editingCommentId || !editingContent.trim()) return;
+    try {
+      const updated = await taskService.updateComment(editingCommentId, editingContent.trim());
+      setComments((prev) => prev.map((c) => (c.id === editingCommentId ? updated : c)));
+      setEditingCommentId(null);
+      setEditingContent('');
+      notifications.show({ title: 'Atualizado', message: 'Comentário atualizado', color: 'green' });
+    } catch (err) {
+      notifications.show({ title: 'Erro', message: 'Não foi possível editar o comentário', color: 'red' });
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await taskService.deleteComment(commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      notifications.show({ title: 'Removido', message: 'Comentário excluído', color: 'gray' });
+    } catch (err) {
+      notifications.show({ title: 'Erro', message: 'Não foi possível excluir o comentário', color: 'red' });
     }
   };
 
@@ -537,18 +573,59 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
         <div style={{ padding: '0 24px 24px' }}>
           <Text size="sm" fw={600} mb="sm" c="var(--text-primary)">Comentários</Text>
           <Stack gap="sm" mb="md">
-            {comments.map((comment) => (
-              <div key={comment.id} style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '10px 14px', border: '1px solid var(--border-subtle)' }}>
-                <Group gap="xs" mb={4}>
-                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-violet), #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 600 }}>
-                    {comment.author ? getInitials(comment.author.full_name) : '?'}
-                  </div>
-                  <Text size="xs" fw={500} c="var(--text-primary)">{comment.author?.full_name || 'Anônimo'}</Text>
-                  <Text size="xs" c="dimmed">{new Date(comment.created_at).toLocaleDateString('pt-BR')}</Text>
-                </Group>
-                <Text size="sm" c="var(--text-secondary)">{comment.content}</Text>
-              </div>
-            ))}
+            {comments.map((comment) => {
+              const isAuthor = user?.id === comment.author_id;
+              const isEditing = editingCommentId === comment.id;
+              return (
+                <div key={comment.id} style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: '10px 14px', border: '1px solid var(--border-subtle)' }}>
+                  <Group gap="xs" mb={4} justify="space-between">
+                    <Group gap="xs">
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-violet), #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 600 }}>
+                        {comment.author ? getInitials(comment.author.full_name) : '?'}
+                      </div>
+                      <Text size="xs" fw={500} c="var(--text-primary)">{comment.author?.full_name || 'Anônimo'}</Text>
+                      <Text size="xs" c="dimmed">{new Date(comment.created_at).toLocaleDateString('pt-BR')}</Text>
+                      {comment.updated_at && comment.updated_at !== comment.created_at && (
+                        <Text size="xs" c="dimmed" fs="italic">(editado)</Text>
+                      )}
+                    </Group>
+                    {isAuthor && !isEditing && (
+                      <Group gap={2}>
+                        <ActionIcon variant="subtle" color="gray" size="xs" onClick={() => handleEditComment(comment)} title="Editar">
+                          <IconEdit size={12} />
+                        </ActionIcon>
+                        <ActionIcon variant="subtle" color="red" size="xs" onClick={() => handleDeleteComment(comment.id)} title="Excluir">
+                          <IconTrash size={12} />
+                        </ActionIcon>
+                      </Group>
+                    )}
+                  </Group>
+                  {isEditing ? (
+                    <div>
+                      <Textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.currentTarget.value)}
+                        autosize
+                        minRows={1}
+                        maxRows={6}
+                        size="xs"
+                        styles={{ input: { backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-subtle)', color: 'var(--text-primary)', fontSize: '13px' } }}
+                      />
+                      <Group gap={4} mt={6}>
+                        <ActionIcon variant="filled" color="green" size="xs" onClick={handleSaveComment} title="Salvar">
+                          <IconCheck size={12} />
+                        </ActionIcon>
+                        <ActionIcon variant="subtle" color="gray" size="xs" onClick={handleCancelEdit} title="Cancelar">
+                          <IconX size={12} />
+                        </ActionIcon>
+                      </Group>
+                    </div>
+                  ) : (
+                    <Text size="sm" c="var(--text-secondary)">{comment.content}</Text>
+                  )}
+                </div>
+              );
+            })}
           </Stack>
           <Textarea value={newComment} onChange={(e) => setNewComment(e.currentTarget.value)}
             placeholder="Adicionar comentário..." autosize minRows={1} maxRows={4}

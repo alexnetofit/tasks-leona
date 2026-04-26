@@ -123,6 +123,36 @@ export async function createComment(comment: Partial<TaskComment>) {
   return data as TaskComment;
 }
 
+/** Atualizar comentário (somente autor via RLS) */
+export async function updateComment(commentId: string, content: string) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq('id', commentId)
+    .select(`
+      *,
+      author:profiles!task_comments_author_id_fkey(id, full_name, avatar_url)
+    `)
+    .single();
+
+  if (error) throw error;
+  return data as TaskComment;
+}
+
+/** Excluir comentário (somente autor via RLS) */
+export async function deleteComment(commentId: string) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .delete()
+    .eq('id', commentId)
+    .select('id');
+
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('Sem permissão ou comentário não encontrado.');
+  }
+}
+
 /** Buscar anexos de uma tarefa */
 export async function getTaskAttachments(taskId: string) {
   const { data, error } = await supabase
