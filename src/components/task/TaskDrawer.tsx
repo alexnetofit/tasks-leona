@@ -141,15 +141,29 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
     } finally { setUploading(false); }
   };
 
-  /** Deletar um anexo */
+  /** Deletar um anexo (banco + CDN). Mostra warning se CDN falhar. */
   const handleDeleteAttachment = async (att: TaskAttachment) => {
     if (!task) return;
     try {
-      await deleteAttachment(att.id, att.file_url);
+      const result = await deleteAttachment(att.id, att.file_url);
       onUpdate();
-      notifications.show({ title: 'Removido', message: 'Anexo removido', color: 'gray' });
-    } catch (err) {
-      notifications.show({ title: 'Erro', message: 'Erro ao remover anexo', color: 'red' });
+      if (result.cdnError) {
+        notifications.show({
+          title: 'Removido (com aviso)',
+          message: `Removido da tarefa, mas falhou no CDN: ${result.cdnError}`,
+          color: 'yellow',
+          autoClose: 8000,
+        });
+      } else {
+        notifications.show({ title: 'Removido', message: 'Anexo removido', color: 'gray' });
+      }
+    } catch (err: any) {
+      notifications.show({
+        title: 'Erro',
+        message: err?.message || 'Erro ao remover anexo',
+        color: 'red',
+        autoClose: 8000,
+      });
     }
   };
 

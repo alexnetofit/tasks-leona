@@ -65,23 +65,37 @@ async function uploadViaApi(
   return json.url as string;
 }
 
-/** Delete via Vercel Function */
+/** Delete via Vercel Function — lança Error se CDN falhar (não silencia) */
 async function deleteViaApi(fileUrl: string): Promise<void> {
   const auth = await getAuthHeader();
+  let res: Response;
   try {
-    const res = await fetchWithTimeout('/api/storage/delete', {
+    res = await fetchWithTimeout('/api/storage/delete', {
       method: 'POST',
       headers: { authorization: auth, 'content-type': 'application/json' },
       body: JSON.stringify({ url: fileUrl }),
       timeoutMs: 15_000,
     });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      console.warn('[storageService] delete falhou:', res.status, text.slice(0, 200));
-    }
   } catch (err: any) {
-    console.warn('[storageService] delete erro de rede:', err?.message || err);
+    if (err?.name === 'AbortError') {
+      throw new Error('Delete demorou demais (timeout)');
+    }
+    throw new Error(`Erro de rede ao remover do CDN: ${err?.message || 'desconhecido'}`);
   }
+
+  if (!res.ok) {
+    let detail = '';
+    const text = await res.text().catch(() => '');
+    try {
+      const json = text ? JSON.parse(text) : null;
+      detail = json?.error || text.slice(0, 200) || `HTTP ${res.status}`;
+    } catch {
+      detail = text.slice(0, 200) || `HTTP ${res.status}`;
+    }
+    console.error('[storageService] CDN delete falhou:', res.status, detail);
+    throw new Error(detail || `CDN delete falhou (HTTP ${res.status})`);
+  }
+  console.log('[storageService] CDN delete OK:', fileUrl);
 }
 
 /** Upload de imagem/arquivo */
@@ -121,9 +135,28 @@ export async function registerAttachment(attachment: {
   return data;
 }
 
-/** Excluir attachment (banco + Bunny CDN via API) */
-export async function deleteAttachment(id: string, fileUrl: string) {
-  await deleteViaApi(fileUrl);
+export type DeleteAttachmentResult = {
+  /** Banco foi limpo (sempre true se não lançou) */
+  ok: true;
+  /** Mensagem de erro do CDN, se houver. Banco é deletado mesmo assim,
+   *  pra evitar lixo travado caso o arquivo já tenha sumido manualmente. */
+  cdnError?: string;
+};
+
+/** Excluir attachment (banco + Bunny CDN via API).
+ *  - Tenta remover do CDN primeiro
+ *  - Independente do resultado da CDN, remove do banco
+ *  - Retorna `cdnError` se a remoção da CDN falhou (pra UI mostrar warning) */
+export async function deleteAttachment(
+  id: string,
+  fileUrl: string
+): Promise<DeleteAttachmentResult> {
+  let cdnError: string | undefined;
+  try {
+    await deleteViaApi(fileUrl);
+  } catch (err: any) {
+    cdnError = err?.message || 'Falha desconhecida ao remover do CDN';
+  }
 
   const { error } = await supabase
     .from('task_attachments')
@@ -131,4 +164,6 @@ export async function deleteAttachment(id: string, fileUrl: string) {
     .eq('id', id);
 
   if (error) throw error;
+
+  return { ok: true, cdnError };
 }

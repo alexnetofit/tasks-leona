@@ -356,7 +356,12 @@ export default function KanbanBoard() {
   };
 
   const handleTaskUpdate = async () => {
-    if (board) { const [tsks, types] = await Promise.all([taskService.getTasks(board.id), getTaskTypes()]); setTasks(tsks); setTaskTypes(types); }
+    if (!board) return;
+    const [tsks, types] = await Promise.all([taskService.getTasks(board.id), getTaskTypes()]);
+    setTasks(tsks);
+    setTaskTypes(types);
+    // Mantém a task aberta no drawer sincronizada (anexos, comentários etc aparecem em tempo real)
+    setSelectedTask((prev) => (prev ? tsks.find((t) => t.id === prev.id) || null : null));
   };
 
   if (loading) {

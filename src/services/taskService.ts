@@ -8,7 +8,7 @@ export async function getTasks(boardId: string) {
     .select(`
       *,
       assignee:profiles!tasks_assigned_to_fkey(id, full_name, avatar_url, email),
-      attachments:task_attachments(id, file_url, file_name, file_type)
+      attachments:task_attachments(id, file_url, file_name, file_type, file_size, created_at)
     `)
     .eq('board_id', boardId)
     .order('position', { ascending: true });
