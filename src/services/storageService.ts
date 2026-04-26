@@ -7,6 +7,20 @@ async function getAuthHeader(): Promise<string> {
   return `Bearer ${session.access_token}`;
 }
 
+const UPLOAD_TIMEOUT_MS = 45_000;
+
+/** fetch com timeout via AbortController */
+async function fetchWithTimeout(input: RequestInfo, init: RequestInit & { timeoutMs?: number } = {}) {
+  const { timeoutMs = UPLOAD_TIMEOUT_MS, ...rest } = init;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...rest, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /** Upload de arquivo via Vercel Function — a access key do Bunny fica no servidor */
 async function uploadViaApi(
   boardId: string,
@@ -22,27 +36,51 @@ async function uploadViaApi(
   form.append('boardId', boardId);
   form.append('taskId', taskId);
 
-  const res = await fetch('/api/storage/upload', {
-    method: 'POST',
-    headers: { authorization: auth },
-    body: form,
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error || `Upload falhou (${res.status})`);
+  let res: Response;
+  try {
+    res = await fetchWithTimeout('/api/storage/upload', {
+      method: 'POST',
+      headers: { authorization: auth },
+      body: form,
+    });
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Upload demorou demais (timeout). Tente um arquivo menor.');
+    }
+    throw new Error(`Erro de rede no upload: ${err?.message || 'desconhecido'}`);
+  }
+
+  let json: any = null;
+  const text = await res.text().catch(() => '');
+  try { json = text ? JSON.parse(text) : null; } catch { /* não-JSON */ }
+
+  if (!res.ok) {
+    const detail = json?.error || text?.slice(0, 200) || `HTTP ${res.status}`;
+    console.error('[storageService] upload falhou:', res.status, detail);
+    throw new Error(detail);
+  }
+  if (!json?.url) {
+    throw new Error('Resposta inválida do servidor (sem URL)');
+  }
   return json.url as string;
 }
 
 /** Delete via Vercel Function */
 async function deleteViaApi(fileUrl: string): Promise<void> {
   const auth = await getAuthHeader();
-  const res = await fetch('/api/storage/delete', {
-    method: 'POST',
-    headers: { authorization: auth, 'content-type': 'application/json' },
-    body: JSON.stringify({ url: fileUrl }),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    console.warn('[storageService] delete falhou:', json?.error || res.status);
+  try {
+    const res = await fetchWithTimeout('/api/storage/delete', {
+      method: 'POST',
+      headers: { authorization: auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ url: fileUrl }),
+      timeoutMs: 15_000,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.warn('[storageService] delete falhou:', res.status, text.slice(0, 200));
+    }
+  } catch (err: any) {
+    console.warn('[storageService] delete erro de rede:', err?.message || err);
   }
 }
 

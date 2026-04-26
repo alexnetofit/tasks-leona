@@ -2,7 +2,6 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import Link from '@tiptap/extension-link';
 import { IconBold, IconItalic, IconStrikethrough, IconH1, IconH2, IconList, IconListNumbers, IconBlockquote, IconCode } from '@tabler/icons-react';
 
 interface RichEditorProps {
@@ -14,15 +13,28 @@ interface RichEditorProps {
   placeholder?: string;
 }
 
+/**
+ * Sanitiza HTML antes de carregar no editor:
+ * - Remove <img src="attachment:..."> deixados pela migração do Notion
+ *   (o Notion usa esse esquema pra apontar arquivos do .zip de exportação,
+ *   esses arquivos não existem aqui e causam ERR_UNKNOWN_URL_SCHEME)
+ * - Também trata src vazio ou inválido
+ */
+function sanitizeContent(html: string): string {
+  if (!html) return html;
+  return html
+    .replace(/<img\b[^>]*\bsrc\s*=\s*["']attachment:[^"']*["'][^>]*\/?>/gi, '')
+    .replace(/<img\b[^>]*\bsrc\s*=\s*["']\s*["'][^>]*\/?>/gi, '');
+}
+
 export default function RichEditor({ value, onChange, onBlur, onImagePaste, onImageClick, placeholder = 'Escreva aqui...' }: RichEditorProps) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ link: { openOnClick: true } }),
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'editor-image' } }),
       Placeholder.configure({ placeholder }),
-      Link.configure({ openOnClick: true }),
     ],
-    content: value,
+    content: sanitizeContent(value),
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     onBlur: () => onBlur?.(),
     editorProps: {

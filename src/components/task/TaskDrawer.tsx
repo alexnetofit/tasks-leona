@@ -107,8 +107,14 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
       onUpdate();
       notifications.show({ title: 'Imagem adicionada', message: 'A imagem foi salva na tarefa', color: 'green' });
       return url;
-    } catch (err) {
-      notifications.show({ title: 'Erro', message: 'Falha no upload da imagem', color: 'red' });
+    } catch (err: any) {
+      console.error('[TaskDrawer] paste error:', err);
+      notifications.show({
+        title: 'Erro no upload',
+        message: err?.message || 'Falha no upload da imagem',
+        color: 'red',
+        autoClose: 8000,
+      });
       return undefined;
     }
   };
@@ -124,9 +130,14 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
       }
       onUpdate();
       notifications.show({ title: 'Arquivo(s) anexado(s)', message: `${files.length} arquivo(s) enviado(s)`, color: 'green' });
-    } catch (err) {
+    } catch (err: any) {
       console.error('[TaskDrawer] Upload error:', err);
-      notifications.show({ title: 'Erro', message: 'Falha ao enviar arquivo(s)', color: 'red' });
+      notifications.show({
+        title: 'Erro no upload',
+        message: err?.message || 'Falha ao enviar arquivo(s)',
+        color: 'red',
+        autoClose: 8000,
+      });
     } finally { setUploading(false); }
   };
 
