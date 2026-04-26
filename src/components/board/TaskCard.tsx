@@ -41,22 +41,9 @@ function getCardIcon(task: Task): string {
   return '📌';
 }
 
-/** Extrair primeiro nome do responsável e gerar inicial */
 function getAssigneeShort(name: string): { initial: string; first: string } {
   const parts = name.trim().split(/\s+/);
   return { initial: parts[0][0]?.toUpperCase() || '?', first: parts[0] };
-}
-
-/** Pegar só a descrição limpa (sem o sufixo Tags:/Branch: que adicionamos no import) */
-function cleanDescription(desc: string | null | undefined): string {
-  if (!desc) return '';
-  // Remove blocos do tipo "Tags: ..." ou "Branch: ..." que adicionamos durante o import
-  const cleaned = desc
-    .split(/\n\s*\n/)
-    .filter((block) => !/^(Tags|Branch):/i.test(block.trim()))
-    .join('\n\n')
-    .trim();
-  return cleaned;
 }
 
 export default function TaskCard({ task, onClick }: TaskCardProps) {
@@ -68,12 +55,12 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
 
   const attachmentCount = task.attachments?.length || 0;
   const icon = getCardIcon(task);
-  const cleanDesc = cleanDescription(task.description);
   const dateStr = task.updated_at
     ? dayjs(task.updated_at).format('MMMM D, YYYY h:mm A')
     : '';
 
   const hasAccent = !!task.color;
+  const assigneeName = task.assignee?.full_name;
 
   return (
     <div
@@ -86,24 +73,20 @@ export default function TaskCard({ task, onClick }: TaskCardProps) {
         <div className="task-card-title">{task.title}</div>
       </div>
 
-      {task.assignee && (
-        <div className="task-card-assignee-chip" title={task.assignee.full_name}>
-          <span className="task-card-assignee-chip-avatar">
-            {getAssigneeShort(task.assignee.full_name).initial}
-          </span>
-          <span>{getAssigneeShort(task.assignee.full_name).first}</span>
-        </div>
-      )}
+      <div className="task-card-assignee-chip" title={assigneeName || 'Sem responsável'}>
+        {assigneeName ? (
+          <>
+            <span className="task-card-assignee-chip-avatar">
+              {getAssigneeShort(assigneeName).initial}
+            </span>
+            <span>{getAssigneeShort(assigneeName).first}</span>
+          </>
+        ) : (
+          <span className="task-card-assignee-empty">Sem responsável</span>
+        )}
+      </div>
 
-      {dateStr && (
-        <div className="task-card-meta">
-          <span className="task-card-date">{dateStr}</span>
-        </div>
-      )}
-
-      {cleanDesc && (
-        <div className="task-card-description-preview">{cleanDesc}</div>
-      )}
+      <div className="task-card-date">{dateStr || '—'}</div>
 
       {(priorityConf || isOverdue || attachmentCount > 0) && (
         <div className="task-card-footer">
