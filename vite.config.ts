@@ -9,6 +9,18 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      workbox: {
+        // NUNCA cachear chamadas de API (server-side functions)
+        navigateFallback: 'index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        // Não tentar precachear nada da pasta /api
+        globIgnores: ['**/api/**'],
+        // SW novo assume controle imediatamente, sem esperar fechar abas
+        skipWaiting: true,
+        clientsClaim: true,
+        // Tamanho máximo por entry (evita PWA reclamar de bundles grandes)
+        maximumFileSizeToCacheInBytes: 5_000_000,
+      },
       manifest: {
         name: 'Leona Projetos',
         short_name: 'Projetos',
