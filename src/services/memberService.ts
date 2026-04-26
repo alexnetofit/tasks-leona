@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from '@/config/supabase';
+import { supabase } from '@/config/supabase';
 import type { Profile } from '@/types';
 
 /** Buscar todos os membros */
@@ -24,7 +24,30 @@ export async function getActiveMembers() {
   return (data || []) as Profile[];
 }
 
-/** Criar novo membro — usa Admin API para skip de email confirmation */
+/** Helper: faz fetch nas APIs admin server-side, autenticado com o JWT atual */
+async function callAdminApi<T = any>(path: string, body: unknown): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Você precisa estar autenticado.');
+  }
+
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json?.error || `Erro ${res.status}`);
+  }
+  return json as T;
+}
+
+/** Criar novo membro — chama a Vercel Function /api/admin/create-member */
 export async function createMember(member: {
   email: string;
   password: string;
@@ -33,42 +56,11 @@ export async function createMember(member: {
   cargo?: string;
   role: 'admin' | 'operacao';
 }) {
-  // Usar supabaseAdmin para criar o user já confirmado (sem email)
-  if (!supabaseAdmin) {
-    throw new Error('Service role key não configurada. Adicione VITE_SUPABASE_SERVICE_ROLE_KEY.');
-  }
-
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-    email: member.email,
-    password: member.password,
-    email_confirm: true, // Já confirmado, sem enviar email
-    user_metadata: {
-      full_name: member.full_name,
-    },
-  });
-
-  if (authError) throw authError;
-  if (!authData.user) throw new Error('Erro ao criar usuário');
-
-  // Aguardar o trigger handle_new_user criar o profile
-  await new Promise((r) => setTimeout(r, 1000));
-
-  // Atualizar campos extras no profile
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({
-      full_name: member.full_name,
-      whatsapp: member.whatsapp || null,
-      cargo: member.cargo || null,
-      role: member.role,
-    })
-    .eq('id', authData.user.id);
-
-  if (profileError) {
-    console.error('[memberService] Erro ao atualizar profile:', profileError);
-  }
-
-  return authData.user;
+  const result = await callAdminApi<{ user: { id: string; email: string } }>(
+    '/api/admin/create-member',
+    member
+  );
+  return result.user;
 }
 
 /** Atualizar dados do membro */
@@ -99,20 +91,14 @@ export async function reactivateMember(id: string) {
   return updateMember(id, { is_active: true });
 }
 
-/** Alterar senha do membro (Admin) — via service_role key */
+/** Alterar senha do membro (Admin) — chama a Vercel Function /api/admin/update-password */
 export async function updateMemberPassword(userId: string, newPassword: string) {
-  if (!supabaseAdmin) {
-    throw new Error('Service role key não configurada. Adicione VITE_SUPABASE_SERVICE_ROLE_KEY.');
-  }
-
   if (newPassword.length < 6) {
     throw new Error('A senha deve ter no mínimo 6 caracteres.');
   }
-
-  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-    password: newPassword,
-  });
-
-  if (error) throw error;
-  return data.user;
+  const result = await callAdminApi<{ user: { id: string; email: string } }>(
+    '/api/admin/update-password',
+    { user_id: userId, new_password: newPassword }
+  );
+  return result.user;
 }

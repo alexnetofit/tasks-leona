@@ -28,3 +28,10 @@ supabase/.temp/
 
 # Scripts sensíveis
 scripts/setup.mjs
+
+# Env vars
+.env
+.env.local
+.env.*.local
+.vercel
+
