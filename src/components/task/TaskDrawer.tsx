@@ -289,14 +289,25 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
       <Drawer
         opened={opened}
         onClose={onClose}
-        position="right"
-        size={isMobile || isExpanded ? '100%' : 'lg'}
+        position={isMobile ? 'bottom' : 'right'}
+        size={isMobile ? '92%' : isExpanded ? '100%' : 'lg'}
         withCloseButton={false}
-        overlayProps={{ backgroundOpacity: 0.4, blur: 3 }}
+        overlayProps={{ backgroundOpacity: 0.5, blur: 3 }}
         classNames={{ content: 'task-drawer-content' }}
         styles={{
-          content: { backgroundColor: 'var(--bg-surface)', transition: 'width 300ms ease' },
-          header: { backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '10px 16px' },
+          content: {
+            backgroundColor: 'var(--bg-surface)',
+            transition: 'width 300ms ease',
+            ...(isMobile ? { borderTopLeftRadius: 16, borderTopRightRadius: 16 } : {}),
+          },
+          header: {
+            backgroundColor: 'var(--bg-surface)',
+            borderBottom: '1px solid var(--border-subtle)',
+            padding: isMobile ? '8px 12px' : '10px 16px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+          },
           body: { padding: 0 },
         }}
         title={
@@ -304,14 +315,15 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
             <Group gap="xs" wrap="nowrap">
               {isMobile && (
                 <ActionIcon
-                  variant="subtle"
+                  variant="light"
                   color="gray"
-                  size="lg"
+                  size="xl"
                   onClick={onClose}
                   aria-label="Voltar"
                   title="Voltar"
+                  style={{ minWidth: 44, minHeight: 44 }}
                 >
-                  <IconChevronLeft size={20} />
+                  <IconChevronLeft size={24} />
                 </ActionIcon>
               )}
               <Badge size="sm" variant="light" color="violet">Tarefa</Badge>
@@ -334,8 +346,14 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
               {/* Actions dropdown */}
               <Menu shadow="md" width={180} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray" size={isMobile ? 'lg' : 'sm'} title="Ações">
-                    <IconDots size={isMobile ? 20 : 16} />
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size={isMobile ? 'xl' : 'sm'}
+                    title="Ações"
+                    style={isMobile ? { minWidth: 44, minHeight: 44 } : undefined}
+                  >
+                    <IconDots size={isMobile ? 22 : 16} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
@@ -349,16 +367,17 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
                 </Menu.Dropdown>
               </Menu>
 
-              {/* Botão X — sempre visível, maior no mobile */}
+              {/* Botão X — sempre visível, bem grande no mobile */}
               <ActionIcon
                 variant={isMobile ? 'filled' : 'subtle'}
-                color={isMobile ? 'gray' : 'gray'}
-                size={isMobile ? 'lg' : 'sm'}
+                color={isMobile ? 'red' : 'gray'}
+                size={isMobile ? 'xl' : 'sm'}
                 onClick={onClose}
                 aria-label="Fechar"
                 title="Fechar"
+                style={isMobile ? { minWidth: 44, minHeight: 44 } : undefined}
               >
-                <IconX size={isMobile ? 20 : 16} />
+                <IconX size={isMobile ? 22 : 16} />
               </ActionIcon>
             </Group>
           </Group>

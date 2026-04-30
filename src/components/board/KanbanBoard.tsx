@@ -5,10 +5,10 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
   IconPlus, IconDots, IconPencil, IconTrash, IconFilter, IconSearch, IconX,
-  IconSettings, IconEye, IconEyeOff, IconArrowsSort, IconTag,
+  IconSettings, IconEye, IconEyeOff, IconArrowsSort, IconTag, IconGripVertical,
 } from '@tabler/icons-react';
 import {
-  DndContext, DragOverlay, closestCorners, KeyboardSensor, MouseSensor, TouchSensor,
+  DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor,
   useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from '@dnd-kit/core';
@@ -41,13 +41,28 @@ function loadHiddenCols(): string[] {
 }
 function saveHiddenCols(ids: string[]) { try { sessionStorage.setItem(HIDDEN_COLS_KEY, JSON.stringify(ids)); } catch {} }
 
-/** Sortable Task Card wrapper */
+/** Sortable Task Card wrapper
+ *
+ * Estratégia: o drag handle (ícone ≡) recebe os listeners do dnd-kit; o
+ * restante do card fica livre para tap/click (abrir drawer). Isso separa
+ * claramente "arrastar" de "tocar" — especialmente importante no mobile,
+ * onde long-press do card inteiro confundia com scroll.
+ */
 function SortableTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id, data: { type: 'task', task, columnId: task.column_id } });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} className="sortable-task-wrapper">
+      <button
+        type="button"
+        className="task-card-drag-handle"
+        aria-label="Arrastar"
+        {...attributes}
+        {...listeners}
+      >
+        <IconGripVertical size={16} />
+      </button>
       <TaskCard task={task} onClick={onClick} />
     </div>
   );
@@ -108,13 +123,11 @@ export default function KanbanBoard() {
   const tasksRef = useRef<Task[]>([]);
   useEffect(() => { tasksRef.current = tasks; }, [tasks]);
 
-  // Sensores:
-  // - MouseSensor: desktop, inicia ao arrastar 5px.
-  // - TouchSensor: mobile, long-press 200ms com tolerância (permite scroll da página).
-  // - KeyboardSensor: acessibilidade.
+  // Drag é iniciado só pelo handle (ícone ≡ do card), então distance pequeno
+  // basta: mouse ou touch precisam mover 5px para começar arrasto, o que
+  // diferencia de toques acidentais sem prejudicar o gesto.
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
   );
 

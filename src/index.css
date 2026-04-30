@@ -363,6 +363,49 @@ body {
 /* ============================================ */
 /* Task Card — Notion-style                     */
 /* ============================================ */
+/* Wrapper do card + drag handle */
+.sortable-task-wrapper {
+  position: relative;
+  display: block;
+}
+
+.task-card-drag-handle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  /* touch-action: none no handle garante que drag funciona sem o browser
+     tentar fazer scroll. Mas o handle ocupa área pequena, então scroll
+     na coluna continua fluindo normal no resto do card. */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.task-card-drag-handle:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+.task-card-drag-handle:active {
+  cursor: grabbing;
+  background: var(--accent-violet-glow);
+  color: var(--accent-violet);
+}
+.sortable-task-wrapper:hover .task-card-drag-handle {
+  opacity: 1;
+}
+
 .task-card {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
@@ -373,9 +416,6 @@ body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  /* touch-action: manipulation remove tap delay e evita zoom no double-tap,
-     mas mantém scroll funcionando. O TouchSensor usa long-press (delay 200ms)
-     para distinguir de scroll. */
   touch-action: manipulation;
   box-shadow: var(--shadow-card);
   position: relative;
@@ -639,19 +679,25 @@ body {
 
   /* Cards maiores e com mais "pegada" no mobile */
   .task-card {
-    padding: 12px 14px;
+    padding: 12px 40px 12px 14px; /* mais espaço à direita para não sobrepor o handle */
     border-radius: 10px;
   }
   .task-card-title { font-size: 15px; }
   .kanban-column-body { gap: 8px; min-height: 60px; }
 
-  /* Feedback visual claro ao iniciar long-press (card "pressionado") */
-  .task-card:active {
-    transform: scale(0.98);
+  /* Drag handle SEMPRE visível no mobile, com área de toque grande */
+  .task-card-drag-handle {
+    opacity: 1 !important;
+    width: 36px;
+    height: 36px;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
     background: var(--bg-card-hover);
-    border-color: var(--accent-violet);
-    box-shadow: var(--shadow-elevated);
-    transition: transform 0.08s ease-out, background 0.08s, box-shadow 0.08s, border-color 0.08s;
+    color: var(--text-secondary);
+  }
+  .task-card-drag-handle:active {
+    transform: translateY(-50%) scale(0.92);
   }
 
   .dashboard-page, .members-page { padding: 16px; }
@@ -672,6 +718,30 @@ body {
   .task-drawer-property { min-height: 36px; }
   .task-drawer-image-item { width: 96px; height: 72px; }
   .task-drawer-image-delete { opacity: 1 !important; }
+
+  /* Bottom sheet "grab bar" — indicador visual de arrastar para fechar.
+     Puramente decorativo (fechar é pelos botões), mas ajuda o usuário a
+     entender o contexto de bottom sheet. */
+  .task-drawer-content[data-position='bottom']::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    z-index: 11;
+    pointer-events: none;
+  }
+
+  /* Scroll do body do drawer em modo bottom sheet */
+  .task-drawer-content[data-position='bottom'] .mantine-Drawer-body {
+    overflow-y: auto;
+    max-height: calc(92vh - 52px); /* altura do drawer menos header */
+    -webkit-overflow-scrolling: touch;
+  }
 }
 
 /* Em telas muito pequenas, título do drawer com ícones maiores para fácil toque */
