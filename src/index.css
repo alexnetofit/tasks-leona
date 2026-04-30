@@ -371,6 +371,12 @@ body {
   cursor: pointer;
   transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* touch-action: manipulation remove tap delay e evita zoom no double-tap,
+     mas mantém scroll funcionando. O TouchSensor usa long-press (delay 200ms)
+     para distinguir de scroll. */
+  touch-action: manipulation;
   box-shadow: var(--shadow-card);
   position: relative;
 }
@@ -622,8 +628,31 @@ body {
   .board-toolbar-title { font-size: 20px; }
   .board-search { max-width: 160px; }
 
-  .kanban-scroll { padding: 8px 16px 16px; gap: 12px; }
-  .kanban-column { min-width: 268px; width: 268px; }
+  .kanban-scroll {
+    padding: 8px 16px 16px;
+    gap: 12px;
+    /* Scroll suave em iOS e evita "engasgos" durante long-press para drag */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .kanban-column { min-width: 282px; width: 282px; }
+
+  /* Cards maiores e com mais "pegada" no mobile */
+  .task-card {
+    padding: 12px 14px;
+    border-radius: 10px;
+  }
+  .task-card-title { font-size: 15px; }
+  .kanban-column-body { gap: 8px; min-height: 60px; }
+
+  /* Feedback visual claro ao iniciar long-press (card "pressionado") */
+  .task-card:active {
+    transform: scale(0.98);
+    background: var(--bg-card-hover);
+    border-color: var(--accent-violet);
+    box-shadow: var(--shadow-elevated);
+    transition: transform 0.08s ease-out, background 0.08s, box-shadow 0.08s, border-color 0.08s;
+  }
 
   .dashboard-page, .members-page { padding: 16px; }
   .dashboard-welcome h1 { font-size: 24px; }
@@ -632,6 +661,22 @@ body {
 
   .task-drawer-title-input { font-size: 22px; }
   .task-drawer-property-label { width: 100px; min-width: 100px; font-size: 12px; }
+
+  /* Task Drawer mobile-friendly: padding menor, hit areas maiores, thumbs
+     de imagem maiores, image-delete sempre visível (sem hover no touch). */
+  .task-drawer-header { padding: 16px 16px 10px; }
+  .task-drawer-properties { padding: 0 16px 12px; }
+  .task-drawer-editor { padding: 14px 16px; }
+  .task-drawer-attachments { padding: 14px 16px; }
+  .task-drawer-properties-grid { gap: 0; }
+  .task-drawer-property { min-height: 36px; }
+  .task-drawer-image-item { width: 96px; height: 72px; }
+  .task-drawer-image-delete { opacity: 1 !important; }
+}
+
+/* Em telas muito pequenas, título do drawer com ícones maiores para fácil toque */
+@media (max-width: 480px) {
+  .task-drawer-title-input { font-size: 20px; }
 }
 
 @media (max-width: 480px) {

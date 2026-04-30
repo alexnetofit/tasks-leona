@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, TextInput, ColorInput, Modal, ActionIcon, Menu, Badge, Group, Switch, Text } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -8,11 +8,11 @@ import {
   IconSettings, IconEye, IconEyeOff, IconArrowsSort, IconTag,
 } from '@tabler/icons-react';
 import {
-  DndContext, DragOverlay, closestCorners, KeyboardSensor, PointerSensor,
+  DndContext, DragOverlay, closestCorners, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDroppable,
   type DragStartEvent, type DragEndEvent, type DragOverEvent,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/contexts/AuthContext';
 import * as boardService from '@/services/boardService';
@@ -103,8 +103,18 @@ export default function KanbanBoard() {
   // Drag state
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
+  // Ref com tasks sempre atualizada — usada dentro dos handlers de DnD
+  // para evitar ler state stale do closure (bug do "card volta ao recarregar").
+  const tasksRef = useRef<Task[]>([]);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+
+  // Sensores:
+  // - MouseSensor: desktop, inicia ao arrastar 5px.
+  // - TouchSensor: mobile, long-press 200ms com tolerância (permite scroll da página).
+  // - KeyboardSensor: acessibilidade.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   );
 
@@ -181,14 +191,11 @@ export default function KanbanBoard() {
 
   // --- Helpers para extrair columnId de um droppable/sortable ---
   const resolveColumnId = (id: string): string | null => {
-    // Se é um id de coluna droppable (format: "column-{uuid}")
     if (typeof id === 'string' && id.startsWith('column-')) {
       return id.replace('column-', '');
     }
-    // Se é um id de task, retornar o column_id da task
-    const task = tasks.find((t) => t.id === id);
+    const task = tasksRef.current.find((t) => t.id === id);
     if (task) return task.column_id;
-    // Se é diretamente um id de coluna
     const col = columns.find((c) => c.id === id);
     if (col) return col.id;
     return null;
@@ -281,77 +288,84 @@ export default function KanbanBoard() {
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Determinar coluna de destino
+    // IMPORTANTE: usar tasksRef.current (sempre atualizado) ao invés de `tasks`
+    // do closure, que pode estar stale após setTasks em handleDragOver.
+    const currentTasks = tasksRef.current;
+
+    const originalColumnId = (active.data?.current as any)?.columnId as string | undefined;
     const targetColumnId = resolveColumnId(overId);
     if (!targetColumnId) return;
 
-    // Buscar a task ativa no state atualizado (pode já ter sido movida pelo handleDragOver)
-    const activeTaskData = tasks.find((t) => t.id === activeId);
+    const activeTaskData = currentTasks.find((t) => t.id === activeId);
     if (!activeTaskData) return;
 
-    // Obter tasks na coluna de destino, ordenadas
-    const columnTasks = tasks
-      .filter((t) => t.column_id === targetColumnId)
+    // Construímos a coluna de destino do zero, sem a task ativa, e então
+    // inserimos a task ativa na posição correta. Isso torna o handler
+    // idempotente: funciona tanto se o state já tiver sido atualizado pelo
+    // handleDragOver quanto se ainda estiver com a task na coluna original.
+    const destWithoutActive = currentTasks
+      .filter((t) => t.column_id === targetColumnId && t.id !== activeId)
       .sort((a, b) => a.position - b.position);
 
-    const oldIndex = columnTasks.findIndex((t) => t.id === activeId);
-    const overTask = columnTasks.find((t) => t.id === overId);
-    const newIndex = overTask ? columnTasks.findIndex((t) => t.id === overId) : columnTasks.length - 1;
+    let insertIndex = destWithoutActive.length;
+    if (overId !== `column-${targetColumnId}`) {
+      const overIdx = destWithoutActive.findIndex((t) => t.id === overId);
+      if (overIdx !== -1) insertIndex = overIdx;
+    }
 
-    // Cenário 1: Reordenação na mesma coluna
-    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-      const reordered = arrayMove(columnTasks, oldIndex, newIndex);
-      const reorderedWithPositions = reordered.map((t, i) => ({ ...t, position: i, column_id: targetColumnId }));
+    const finalDest = [...destWithoutActive];
+    finalDest.splice(insertIndex, 0, { ...activeTaskData, column_id: targetColumnId });
 
-      setTasks((prev) => {
-        const otherTasks = prev.filter((t) => t.column_id !== targetColumnId);
-        return [...otherTasks, ...reorderedWithPositions];
+    const destWithPositions = finalDest.map((t, i) => ({
+      ...t,
+      position: i,
+      column_id: targetColumnId,
+    }));
+
+    // Se foi movimentação cross-column, recalcular source também.
+    const sourceWithPositions =
+      originalColumnId && originalColumnId !== targetColumnId
+        ? currentTasks
+            .filter((t) => t.column_id === originalColumnId && t.id !== activeId)
+            .sort((a, b) => a.position - b.position)
+            .map((t, i) => ({ ...t, position: i, column_id: originalColumnId }))
+        : [];
+
+    // Atualiza state local de forma consistente (garante que nada fique "pulando").
+    setTasks((prev) => {
+      const affectedColumns = new Set<string>([targetColumnId]);
+      if (originalColumnId) affectedColumns.add(originalColumnId);
+      const untouched = prev.filter((t) => !t.column_id || !affectedColumns.has(t.column_id));
+      return [...untouched, ...sourceWithPositions, ...destWithPositions];
+    });
+
+    // Persistir no backend.
+    const updates = [
+      ...destWithPositions.map((t) => ({
+        id: t.id,
+        position: t.position,
+        column_id: targetColumnId,
+      })),
+      ...sourceWithPositions.map((t) => ({
+        id: t.id,
+        position: t.position,
+        column_id: originalColumnId as string,
+      })),
+    ];
+
+    if (updates.length === 0) return;
+
+    try {
+      await taskService.reorderTasks(updates);
+    } catch (err) {
+      console.error('[KanbanBoard] Erro ao persistir movimentação:', err);
+      notifications.show({
+        title: 'Erro',
+        message: 'Não foi possível salvar a movimentação. Recarregando...',
+        color: 'red',
       });
-
-      try {
-        await taskService.reorderTasks(reorderedWithPositions.map((t, i) => ({
-          id: t.id, position: i, column_id: targetColumnId,
-        })));
-      } catch (err) {
-        console.error('[KanbanBoard] Erro ao reordenar:', err);
-      }
-      return;
-    }
-
-    // Cenário 2: Card já foi movido entre colunas pelo handleDragOver
-    // Precisamos persistir as posições de ambas as colunas afetadas
-    const originalColumnId = (active.data?.current as any)?.columnId;
-    if (originalColumnId && originalColumnId !== targetColumnId) {
-      // Persistir as posições da coluna de origem
-      const sourceColumnTasks = tasks
-        .filter((t) => t.column_id === originalColumnId)
-        .sort((a, b) => a.position - b.position);
-
-      // Persistir as posições da coluna de destino
-      const destColumnTasks = tasks
-        .filter((t) => t.column_id === targetColumnId)
-        .sort((a, b) => a.position - b.position);
-
-      const allUpdates = [
-        ...sourceColumnTasks.map((t, i) => ({ id: t.id, position: i, column_id: originalColumnId })),
-        ...destColumnTasks.map((t, i) => ({ id: t.id, position: i, column_id: targetColumnId })),
-      ];
-
-      try {
-        await taskService.reorderTasks(allUpdates);
-      } catch (err) {
-        console.error('[KanbanBoard] Erro ao persistir movimentação:', err);
-      }
-      return;
-    }
-
-    // Cenário 3: Drop em coluna vazia (sem reordenação, apenas mover)
-    if (oldIndex === -1 && targetColumnId) {
-      try {
-        await taskService.moveTask(activeId, targetColumnId, 0);
-      } catch (err) {
-        console.error('[KanbanBoard] Erro ao mover para coluna vazia:', err);
-      }
+      // Recarregar para garantir consistência com o banco
+      await loadData();
     }
   };
 

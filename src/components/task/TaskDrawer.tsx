@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Drawer, Select, ActionIcon, Text, Group, Stack, Badge, Textarea, Combobox, useCombobox, TextInput, InputBase, Menu, ColorInput, Loader } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import {
   IconUser, IconTag, IconCalendar, IconFlame, IconTrash, IconColumns3,
   IconDots, IconLink, IconMaximize, IconMinimize, IconPalette,
   IconPaperclip, IconUpload, IconFile, IconX, IconDownload,
-  IconEdit, IconCheck,
+  IconEdit, IconCheck, IconChevronLeft,
 } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/AuthContext';
 import * as taskService from '@/services/taskService';
@@ -31,6 +32,7 @@ interface TaskDrawerProps {
 
 export default function TaskDrawer({ task, opened, onClose, onUpdate, members, columns, boardId, taskTypes }: TaskDrawerProps) {
   const { user } = useAuth();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string | null>(null);
@@ -288,35 +290,52 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
         opened={opened}
         onClose={onClose}
         position="right"
-        size={isExpanded ? '100%' : 'lg'}
+        size={isMobile || isExpanded ? '100%' : 'lg'}
         withCloseButton={false}
         overlayProps={{ backgroundOpacity: 0.4, blur: 3 }}
+        classNames={{ content: 'task-drawer-content' }}
         styles={{
           content: { backgroundColor: 'var(--bg-surface)', transition: 'width 300ms ease' },
           header: { backgroundColor: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', padding: '10px 16px' },
           body: { padding: 0 },
         }}
         title={
-          <Group gap="xs" justify="space-between" w="100%">
-            <Badge size="sm" variant="light" color="violet">Tarefa</Badge>
+          <Group gap="xs" justify="space-between" wrap="nowrap" w="100%">
+            <Group gap="xs" wrap="nowrap">
+              {isMobile && (
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="lg"
+                  onClick={onClose}
+                  aria-label="Voltar"
+                  title="Voltar"
+                >
+                  <IconChevronLeft size={20} />
+                </ActionIcon>
+              )}
+              <Badge size="sm" variant="light" color="violet">Tarefa</Badge>
+            </Group>
 
-            <Group gap={4} ml="auto">
-              {/* Expand / Minimize — ícones bem distintos */}
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="sm"
-                onClick={() => setIsExpanded((prev) => !prev)}
-                title={isExpanded ? 'Reduzir' : 'Expandir'}
-              >
-                {isExpanded ? <IconMinimize size={16} /> : <IconMaximize size={16} />}
-              </ActionIcon>
+            <Group gap={4} wrap="nowrap">
+              {/* Expand / Minimize — só faz sentido em desktop */}
+              {!isMobile && (
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  title={isExpanded ? 'Reduzir' : 'Expandir'}
+                >
+                  {isExpanded ? <IconMinimize size={16} /> : <IconMaximize size={16} />}
+                </ActionIcon>
+              )}
 
               {/* Actions dropdown */}
               <Menu shadow="md" width={180} position="bottom-end">
                 <Menu.Target>
-                  <ActionIcon variant="subtle" color="gray" size="sm" title="Ações">
-                    <IconDots size={16} />
+                  <ActionIcon variant="subtle" color="gray" size={isMobile ? 'lg' : 'sm'} title="Ações">
+                    <IconDots size={isMobile ? 20 : 16} />
                   </ActionIcon>
                 </Menu.Target>
                 <Menu.Dropdown>
@@ -329,6 +348,18 @@ export default function TaskDrawer({ task, opened, onClose, onUpdate, members, c
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
+
+              {/* Botão X — sempre visível, maior no mobile */}
+              <ActionIcon
+                variant={isMobile ? 'filled' : 'subtle'}
+                color={isMobile ? 'gray' : 'gray'}
+                size={isMobile ? 'lg' : 'sm'}
+                onClick={onClose}
+                aria-label="Fechar"
+                title="Fechar"
+              >
+                <IconX size={isMobile ? 20 : 16} />
+              </ActionIcon>
             </Group>
           </Group>
         }
