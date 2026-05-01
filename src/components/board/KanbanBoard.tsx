@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, TextInput, ColorInput, Modal, ActionIcon, Menu, Badge, Group, Switch, Text } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
   IconPlus, IconDots, IconPencil, IconTrash, IconFilter, IconSearch, IconX,
@@ -43,26 +43,36 @@ function saveHiddenCols(ids: string[]) { try { sessionStorage.setItem(HIDDEN_COL
 
 /** Sortable Task Card wrapper
  *
- * Estratégia: o drag handle (ícone ≡) recebe os listeners do dnd-kit; o
- * restante do card fica livre para tap/click (abrir drawer). Isso separa
- * claramente "arrastar" de "tocar" — especialmente importante no mobile,
- * onde long-press do card inteiro confundia com scroll.
+ * Estratégia por dispositivo:
+ * - Desktop: card inteiro é arrastável (UX mais fluida com mouse).
+ * - Mobile: só o drag handle (ícone ≡) recebe listeners, para separar
+ *   claramente "arrastar" de "tocar"/scroll no touch.
  */
-function SortableTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+function SortableTaskCard({ task, onClick, isMobile }: { task: Task; onClick: () => void; isMobile: boolean }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id, data: { type: 'task', task, columnId: task.column_id } });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+
+  if (isMobile) {
+    return (
+      <div ref={setNodeRef} style={style} className="sortable-task-wrapper">
+        <button
+          type="button"
+          className="task-card-drag-handle"
+          aria-label="Arrastar"
+          {...attributes}
+          {...listeners}
+        >
+          <IconGripVertical size={16} />
+        </button>
+        <TaskCard task={task} onClick={onClick} />
+      </div>
+    );
+  }
+
+  // Desktop: listeners no wrapper inteiro
   return (
-    <div ref={setNodeRef} style={style} className="sortable-task-wrapper">
-      <button
-        type="button"
-        className="task-card-drag-handle"
-        aria-label="Arrastar"
-        {...attributes}
-        {...listeners}
-      >
-        <IconGripVertical size={16} />
-      </button>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       <TaskCard task={task} onClick={onClick} />
     </div>
   );
@@ -87,6 +97,7 @@ function DroppableColumn({ columnId, children }: { columnId: string; children: R
 
 export default function KanbanBoard() {
   const { user } = useAuth();
+  const isMobile = useMediaQuery('(max-width: 768px)') ?? false;
   const [searchParams, setSearchParams] = useSearchParams();
   const [board, setBoard] = useState<Board | null>(null);
   const [columns, setColumns] = useState<BoardColumn[]>([]);
@@ -521,7 +532,7 @@ export default function KanbanBoard() {
                 <SortableContext items={colTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                   <DroppableColumn columnId={col.id}>
                     {colTasks.map((task) => (
-                      <SortableTaskCard key={task.id} task={task} onClick={() => { setSelectedTask(task); openDrawer(); }} />
+                      <SortableTaskCard key={task.id} task={task} isMobile={isMobile} onClick={() => { setSelectedTask(task); openDrawer(); }} />
                     ))}
                   </DroppableColumn>
                 </SortableContext>
